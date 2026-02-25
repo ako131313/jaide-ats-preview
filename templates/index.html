@@ -1,0 +1,1360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JAIDE ATS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23FFFFFF'/><text x='16' y='23' font-family='Inter,Arial,sans-serif' font-size='22' font-weight='700' text-anchor='middle' fill='%230059FF'>J</text></svg>">
+    {% if session.get('user_id') %}
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    {% endif %}
+</head>
+<body class="{% if session.get('user_id') %}app-mode{% else %}mkt-mode{% endif %}">
+
+{% if session.get('user_id') %}
+
+    <!-- ===== APP NAV ===== -->
+    <header class="top-nav">
+        <div class="nav-left">
+            <a href="#" id="nav-logo" class="nav-logo-link" title="Dashboard">
+                <img src="/static/jaide-ats-logo.png" alt="JAIDE ATS" class="nav-logo-img">
+            </a>
+        </div>
+        <nav class="nav-center" id="nav-tabs">
+            <button class="nav-tab" data-view="dashboard">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                Dashboard
+            </button>
+            <button class="nav-tab" data-view="jobs">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
+                Jobs
+            </button>
+            <button class="nav-tab" data-view="attorneys">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                Attorneys
+            </button>
+            <button class="nav-tab" data-view="firms">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/><path d="M9 9h1M9 13h1M9 17h1"/></svg>
+                Firms
+            </button>
+        </nav>
+        <div class="nav-right">
+            <button class="nav-gear" id="btn-settings" title="Settings">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            </button>
+            <div class="nav-avatar-wrap">
+                <div class="nav-avatar" id="nav-avatar" title="Account">
+                    <span>{{ (session.get('user_name') or 'U')[0]|upper }}</span>
+                </div>
+                <div class="nav-avatar-dropdown" id="avatar-dropdown">
+                    <div class="avatar-dropdown-user">
+                        <div class="avatar-dropdown-name">{{ session.get('user_name') or '' }}</div>
+                        <div class="avatar-dropdown-email">{{ session.get('user_email') or '' }}</div>
+                    </div>
+                    <hr class="avatar-dropdown-divider">
+                    <button class="avatar-dropdown-item" id="dropdown-settings">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                        Settings
+                    </button>
+                    <button class="avatar-dropdown-item avatar-dropdown-signout" id="btn-logout">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                        Sign Out
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- ===== App Container ===== -->
+    <div class="app-container" id="app-container">
+
+        <!-- ========== SEARCH VIEW (shared by Jobs + Attorneys tabs) ========== -->
+        <div id="view-search" class="view">
+            <!-- Chat Panel -->
+            <main class="chat-panel" id="chat-panel">
+                <div class="chat-messages" id="chat-messages">
+                    <!-- Attorney Search Welcome -->
+                    <div class="welcome" id="welcome">
+                        <div class="welcome-icon">
+                            <svg width="48" height="48" viewBox="0 0 48 48" fill="none"><rect width="48" height="48" rx="12" fill="#E0F1FF"/><path d="M16 20h16M16 28h10" stroke="#0059FF" stroke-width="2.5" stroke-linecap="round"/><circle cx="34" cy="32" r="6" fill="#0059FF" fill-opacity=".15" stroke="#0059FF" stroke-width="2"/><path d="M36.5 34.5L39 37" stroke="#0059FF" stroke-width="2" stroke-linecap="round"/></svg>
+                        </div>
+                        <h1 class="welcome-title">Find the right attorney candidates</h1>
+                        <p class="welcome-sub">Paste a job description or describe the role you're hiring for. JAIDE ATS will analyze your requirements, match them against attorney profiles, and surface the strongest candidates.</p>
+                    </div>
+                    <!-- Job Search Welcome -->
+                    <div class="welcome" id="job-search-welcome" style="display:none">
+                        <div class="welcome-icon">
+                            <svg width="48" height="48" viewBox="0 0 48 48" fill="none"><rect width="48" height="48" rx="12" fill="#E0F1FF"/><rect x="10" y="18" width="28" height="20" rx="3" stroke="#0059FF" stroke-width="2.5"/><path d="M22 18v-4a4 4 0 014-4h0a4 4 0 014 4v4" stroke="#0059FF" stroke-width="2.5" stroke-linecap="round"/><circle cx="24" cy="28" r="2" fill="#0059FF"/></svg>
+                        </div>
+                        <h1 class="welcome-title">Search legal job openings</h1>
+                        <p class="welcome-sub">Search through thousands of legal job openings using natural language. Describe the type of role, practice area, location, or firm you're interested in.</p>
+                    </div>
+                </div>
+                <div class="chat-input-area">
+                    <div class="suggestion-chips" id="suggestion-chips">
+                        <button class="chip" data-query="Find candidates that fit your hiring needs">Find candidates that fit your hiring needs</button>
+                        <button class="chip" data-query="Analyze a firm's hiring patterns">Analyze a firm's hiring patterns</button>
+                        <button class="chip" data-query="Explore hiring trends">Explore hiring trends</button>
+                    </div>
+                    <div class="suggestion-chips" id="job-suggestion-chips" style="display:none">
+                        <button class="chip job-chip" data-query="Corporate M&A positions in New York">Corporate M&A in New York</button>
+                        <button class="chip job-chip" data-query="Real estate associate positions">Real Estate Associates</button>
+                        <button class="chip job-chip" data-query="Litigation roles with 3-5 years experience">Litigation 3-5 Years</button>
+                        <button class="chip job-chip" data-query="Open positions at Am Law 100 firms">Am Law 100 Openings</button>
+                    </div>
+                    <div class="chat-input-wrapper">
+                        <textarea class="chat-input" id="chat-input" rows="1" placeholder="Describe the role you're hiring for, or paste a job description..."></textarea>
+                        <div class="input-controls">
+                            <div class="mode-toggle" id="mode-toggle" title="Toggle analysis mode">
+                                <svg class="mode-icon" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8 5v3l2 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                <span class="mode-label" id="mode-label">AI Analysis</span>
+                            </div>
+                            <button class="btn-send" id="btn-send" title="Send">
+                                <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 10l14-7-7 14V10H3z" fill="currentColor"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Drag divider -->
+            <div class="panel-divider" id="panel-divider"></div>
+
+            <!-- Results Panel -->
+            <section class="results-panel" id="results-panel">
+                <div class="results-placeholder" id="results-placeholder">
+                    <div class="results-placeholder-icon">
+                        <svg width="64" height="64" viewBox="0 0 64 64" fill="none"><rect x="8" y="12" width="48" height="40" rx="6" stroke="#d1d5db" stroke-width="2"/><path d="M20 24h24M20 32h18M20 40h12" stroke="#d1d5db" stroke-width="2" stroke-linecap="round"/></svg>
+                    </div>
+                    <p class="results-placeholder-text">Results will appear here</p>
+                    <p class="results-placeholder-sub">Submit a job description to see matched candidates, hiring patterns, and tiered rankings.</p>
+                </div>
+                <div class="results-content" id="results-content" style="display:none">
+                    <div class="results-header">
+                        <div class="results-header-left">
+                            <h2 class="results-title" id="results-title">Search Results</h2>
+                            <span class="results-mode-badge" id="results-mode-badge"></span>
+                        </div>
+                        <div class="results-header-right">
+                            <button class="btn-save-job" id="btn-save-job" style="display:none">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
+                                Save as Job
+                            </button>
+                            <button class="btn-export" id="btn-export">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M4 7l4 4 4-4M2 12v2h12v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                Export as HTML
+                            </button>
+                        </div>
+                    </div>
+                    <div class="charts-row" id="charts-row">
+                        <div class="chart-box" id="chart-firms">
+                            <div class="chart-title">Top Feeder Firms</div>
+                            <div class="chart-bars" id="chart-bars-firms"></div>
+                        </div>
+                        <div class="chart-box" id="chart-schools">
+                            <div class="chart-title">Top Feeder Schools</div>
+                            <div class="chart-bars" id="chart-bars-schools"></div>
+                        </div>
+                    </div>
+                    <div class="scoring-breakdown" id="scoring-breakdown">
+                        <div class="scoring-title">Candidate Scoring Algorithm</div>
+                        <div class="scoring-bars" id="scoring-bars"></div>
+                    </div>
+                    <div class="table-controls">
+                        <input type="text" class="table-search" id="table-search" placeholder="Filter candidates...">
+                    </div>
+                    <div id="tier-tables"></div>
+                </div>
+
+                <!-- Job Search Results -->
+                <div class="job-results-content" id="job-results-content" style="display:none">
+                    <div class="results-header">
+                        <div class="results-header-left">
+                            <h2 class="results-title" id="job-results-title">Job Search Results</h2>
+                            <span class="job-results-count" id="job-results-count"></span>
+                        </div>
+                        <div class="results-header-right">
+                            <select id="job-filter-status-search" class="filter-select">
+                                <option value="">All Status</option>
+                                <option value="Open" selected>Open</option>
+                                <option value="Closed">Closed</option>
+                            </select>
+                            <select id="job-sort-search" class="filter-select">
+                                <option value="relevance">By Relevance</option>
+                                <option value="firm">By Firm</option>
+                                <option value="title">By Title</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="job-results-grid" id="job-results-grid"></div>
+                </div>
+
+                <!-- Sent Emails View -->
+                <div class="sent-emails-view" id="sent-emails-view" style="display:none">
+                    <div class="results-header">
+                        <div class="results-header-left">
+                            <button class="btn-back" id="btn-sent-back">&larr; Back</button>
+                            <h2 class="results-title">Sent Emails</h2>
+                        </div>
+                    </div>
+                    <div id="sent-emails-table"></div>
+                </div>
+
+                <!-- ATS: Employers View -->
+                <div class="ats-view" id="employers-view" style="display:none">
+                    <div class="results-header">
+                        <div class="results-header-left">
+                            <h2 class="results-title">Employers</h2>
+                        </div>
+                        <div class="results-header-right">
+                            <input type="text" class="table-search" id="employer-search" placeholder="Search employers...">
+                            <button class="btn-primary btn-sm" id="btn-add-employer">+ Add Employer</button>
+                        </div>
+                    </div>
+                    <div id="employers-table"></div>
+                </div>
+
+                <!-- ATS: Employer Detail View -->
+                <div class="ats-view" id="employer-detail-view" style="display:none">
+                    <div class="results-header">
+                        <div class="results-header-left">
+                            <button class="btn-back" id="btn-employer-back">&larr; Back</button>
+                            <h2 class="results-title" id="employer-detail-title">Employer</h2>
+                        </div>
+                        <button class="btn-secondary btn-sm" id="btn-edit-employer">Edit</button>
+                    </div>
+                    <div id="employer-detail-content"></div>
+                </div>
+
+                <!-- ATS: Jobs View -->
+                <div class="ats-view" id="jobs-view" style="display:none">
+                    <div class="results-header">
+                        <div class="results-header-left">
+                            <h2 class="results-title">Jobs</h2>
+                        </div>
+                        <div class="results-header-right">
+                            <select id="job-filter-status" class="filter-select">
+                                <option value="">All Status</option>
+                                <option value="Active">Active</option>
+                                <option value="On Hold">On Hold</option>
+                                <option value="Filled">Filled</option>
+                                <option value="Closed">Closed</option>
+                            </select>
+                            <select id="job-filter-employer" class="filter-select">
+                                <option value="">All Employers</option>
+                            </select>
+                            <button class="btn-primary btn-sm" id="btn-add-job">+ Add Job</button>
+                        </div>
+                    </div>
+                    <div id="jobs-table"></div>
+                </div>
+
+                <!-- Similar Attorneys Results View -->
+                <div class="similar-results-view" id="similar-results-view" style="display:none"></div>
+
+                <!-- Floating Action Bar (attorney results) -->
+                <div class="floating-action-bar" id="floating-bar" style="display:none">
+                    <span class="fab-count" id="fab-count">0 selected</span>
+                    <button class="fab-btn fab-btn-primary" id="fab-send-email">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></svg>
+                        Send Email
+                    </button>
+                    <button class="fab-btn" id="fab-add-pipeline">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><path d="M17.5 17.5v5M15 20h5"/></svg>
+                        Add to Pipeline
+                    </button>
+                    <button class="fab-btn" id="fab-export">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M4 7l4 4 4-4M2 12v2h12v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        Export Selected
+                    </button>
+                    <button class="fab-btn fab-btn-compare" id="fab-compare" style="display:none">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="8" height="18" rx="1"/><rect x="14" y="3" width="8" height="18" rx="1"/><path d="M10 12h4"/></svg>
+                        Compare
+                    </button>
+                    <button class="fab-btn fab-btn-clear" id="fab-clear">Clear</button>
+                </div>
+            </section>
+        </div>
+
+        <!-- ========== DASHBOARD VIEW ========== -->
+        <div id="view-dashboard" class="view view-active">
+            <div class="dashboard-content">
+                <!-- Metric Cards -->
+                <div class="dashboard-metrics" id="dashboard-metrics">
+                    <div class="metric-card">
+                        <div class="metric-icon metric-icon-jobs">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
+                        </div>
+                        <div class="metric-info">
+                            <div class="metric-value" id="metric-active-jobs">0</div>
+                            <div class="metric-label">Active Jobs</div>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon metric-icon-pipeline">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                        </div>
+                        <div class="metric-info">
+                            <div class="metric-value" id="metric-pipeline">0</div>
+                            <div class="metric-label">Pipeline Candidates</div>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon metric-icon-interviews">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                        </div>
+                        <div class="metric-info">
+                            <div class="metric-value" id="metric-interviews">0</div>
+                            <div class="metric-label">Interviews</div>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon metric-icon-placements">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        </div>
+                        <div class="metric-info">
+                            <div class="metric-value" id="metric-placements">0</div>
+                            <div class="metric-label">Placements</div>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon metric-icon-value">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                        </div>
+                        <div class="metric-info">
+                            <div class="metric-value" id="metric-pipeline-value">$0</div>
+                            <div class="metric-label">Pipeline Value</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="dashboard-actions">
+                    <button class="dash-action-btn dash-action-primary" id="dash-add-candidate">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="17" y1="11" x2="23" y2="11"/></svg>
+                        Add to Pipeline
+                    </button>
+                    <button class="dash-action-btn" id="dash-manage-jobs">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
+                        Manage Jobs
+                    </button>
+                    <button class="dash-action-btn" id="dash-manage-employers">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>
+                        Manage Employers
+                    </button>
+                    <button class="dash-action-btn" id="dash-sent-emails">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></svg>
+                        Sent Emails
+                    </button>
+                </div>
+
+                <!-- Pipeline Board -->
+                <div class="dashboard-section">
+                    <div class="pipeline-header">
+                        <div class="pipeline-header-left">
+                            <h2 class="section-title">Pipeline Board</h2>
+                            <button class="btn-primary btn-sm" id="btn-pipeline-add">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                Add Candidate
+                            </button>
+                        </div>
+                        <div class="pipeline-controls">
+                            <select id="pipeline-filter-job" class="filter-select">
+                                <option value="">All Jobs</option>
+                            </select>
+                            <select id="pipeline-filter-employer" class="filter-select">
+                                <option value="">All Employers</option>
+                            </select>
+                            <input type="text" class="table-search" id="pipeline-search" placeholder="Search candidates...">
+                            <select id="pipeline-sort" class="filter-select">
+                                <option value="newest">Newest First</option>
+                                <option value="oldest">Oldest First</option>
+                                <option value="alpha">Alphabetical</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="kanban-board" id="kanban-board"></div>
+                    <div class="pipeline-empty" id="pipeline-empty" style="display:none">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+                        <p>No candidates in the pipeline yet.</p>
+                        <p class="pipeline-empty-sub">Search for attorneys and add them to get started.</p>
+                        <button class="btn-primary" id="btn-pipeline-new-search">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Add Your First Candidate
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Recent Activity -->
+                <div class="dashboard-section">
+                    <h2 class="section-title">Recent Activity</h2>
+                    <div id="activity-feed"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== FIRMS VIEW ========== -->
+        <div id="view-firms" class="view">
+            <div class="firms-content">
+                <div class="firms-header">
+                    <div class="firms-header-left">
+                        <h2 class="section-title">Firms</h2>
+                        <span class="firms-count" id="firms-count"></span>
+                    </div>
+                    <div class="firms-header-right">
+                        <button class="btn-ai-search" id="btn-ai-firm-search" title="Toggle AI-powered search">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a4 4 0 014 4c0 1.95-1.4 3.58-3.25 3.93L12 22l-.75-12.07A4.001 4.001 0 0112 2z"/><circle cx="12" cy="6" r="1" fill="currentColor"/></svg>
+                            AI
+                        </button>
+                        <input type="text" class="table-search firms-search" id="firms-search" placeholder="Search firms...">
+                    </div>
+                </div>
+                <div class="firms-grid" id="firms-grid"></div>
+                <div class="firm-detail" id="firm-detail" style="display:none"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ===== MODALS ===== -->
+
+    <!-- Attorney Profile Modal -->
+    <div class="profile-overlay" id="profile-overlay">
+        <div class="profile-card" id="profile-card"></div>
+    </div>
+
+    <!-- Email Settings Modal -->
+    <div class="modal-overlay" id="settings-overlay">
+        <div class="modal-card">
+            <button class="modal-close" id="settings-close">&times;</button>
+            <h2 class="modal-title">Email Settings</h2>
+            <form id="settings-form" autocomplete="off">
+                <div class="form-group">
+                    <label>Send Mode</label>
+                    <select id="set-mode">
+                        <option value="mailto">Mailto (open email client)</option>
+                        <option value="smtp">SMTP (send directly)</option>
+                    </select>
+                </div>
+                <div class="smtp-fields" id="smtp-fields" style="display:none">
+                    <div class="form-group">
+                        <label>Provider</label>
+                        <select id="set-provider">
+                            <option value="gmail">Gmail</option>
+                            <option value="outlook">Outlook / Office 365</option>
+                            <option value="custom">Custom SMTP</option>
+                        </select>
+                    </div>
+                    <div class="custom-smtp-fields" id="custom-smtp-fields" style="display:none">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>SMTP Host</label>
+                                <input type="text" id="set-custom-host" placeholder="smtp.example.com">
+                            </div>
+                            <div class="form-group" style="max-width:100px">
+                                <label>Port</label>
+                                <input type="number" id="set-custom-port" value="587">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Email Address</label>
+                        <input type="email" id="set-email" placeholder="you@example.com">
+                    </div>
+                    <div class="form-group">
+                        <label>Password / App Password</label>
+                        <input type="password" id="set-password" placeholder="Enter password (stored in memory only)">
+                        <span class="form-hint">Never saved to disk. Session-only.</span>
+                    </div>
+                </div>
+                <hr class="form-divider">
+                <div class="form-group">
+                    <label>Display Name</label>
+                    <input type="text" id="set-display-name" placeholder="Your Name">
+                </div>
+                <div class="form-group">
+                    <label>Title</label>
+                    <input type="text" id="set-title" placeholder="e.g. Recruiting Manager">
+                </div>
+                <div class="form-group">
+                    <label>Phone</label>
+                    <input type="text" id="set-phone" placeholder="(555) 123-4567">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" id="btn-test-email">Send Test Email</button>
+                    <button type="submit" class="btn-primary">Save Settings</button>
+                </div>
+                <div class="form-status" id="settings-status"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Email Composer Modal -->
+    <div class="modal-overlay" id="composer-overlay">
+        <div class="modal-card modal-composer">
+            <button class="modal-close" id="composer-close">&times;</button>
+            <h2 class="modal-title">Compose Email</h2>
+            <div class="composer-body">
+                <div class="form-group">
+                    <label>To</label>
+                    <div class="recipient-pills" id="recipient-pills"></div>
+                    <div class="personalize-hint" id="personalize-hint" style="display:none">Tip: Use 'Personalize' for an AI draft tailored to this attorney's background</div>
+                    <div class="no-email-warning" id="no-email-warning" style="display:none"></div>
+                </div>
+                <div class="cc-toggle-row">
+                    <button type="button" class="cc-toggle" id="cc-toggle">CC / BCC</button>
+                </div>
+                <div class="cc-fields" id="cc-fields" style="display:none">
+                    <div class="form-group">
+                        <label>CC</label>
+                        <input type="text" id="composer-cc" placeholder="cc@example.com">
+                    </div>
+                    <div class="form-group">
+                        <label>BCC</label>
+                        <input type="text" id="composer-bcc" placeholder="bcc@example.com">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>From</label>
+                    <input type="text" id="composer-from" readonly class="input-readonly">
+                </div>
+                <div class="form-group">
+                    <label>Template</label>
+                    <div class="template-row">
+                        <select id="composer-template">
+                            <option value="">— No template —</option>
+                            <option value="initial">Initial Outreach</option>
+                            <option value="followup">Follow-Up</option>
+                            <option value="confidential">Confidential Inquiry</option>
+                        </select>
+                        <button type="button" class="btn-ai-draft" id="btn-ai-draft" title="Generate email with AI based on job description">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z"/></svg>
+                            AI Draft
+                        </button>
+                        <button type="button" class="btn-personalize" id="btn-personalize" title="Generate a personalized email tailored to this attorney's background" style="display:none">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3l1.5 4.5H18l-3.7 2.7 1.4 4.3L12 11.8l-3.7 2.7 1.4-4.3L6 7.5h4.5z"/><path d="M5 2l.6 1.8H7.4L6 5l.6 1.8L5 5.6 3.4 6.8 4 5 2.6 3.8H4.4z"/><path d="M19 12l.6 1.8h1.8L20 15l.6 1.8-1.6-1.2-1.6 1.2.6-1.8-1.4-1.2h1.8z"/></svg>
+                            Personalize
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Subject</label>
+                    <input type="text" id="composer-subject" placeholder="Subject line...">
+                </div>
+                <div class="form-group">
+                    <label>Body <span class="merge-hint">Use {first_name}, {firm}, {law_school}, {sender_name}, etc.</span></label>
+                    <textarea id="composer-body" rows="10" placeholder="Write your email..."></textarea>
+                </div>
+                <div class="preview-section" id="preview-section" style="display:none">
+                    <div class="preview-header">
+                        <label>Preview for:</label>
+                        <select id="preview-recipient"></select>
+                    </div>
+                    <div class="preview-rendered" id="preview-rendered"></div>
+                </div>
+                <div class="composer-actions">
+                    <button type="button" class="btn-secondary" id="btn-preview-toggle">Preview</button>
+                    <button type="button" class="btn-secondary" id="btn-send-test">Send Test to Me</button>
+                    <button type="button" class="btn-primary" id="btn-send-all">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+                        Send All
+                    </button>
+                </div>
+                <div class="composer-progress" id="composer-progress" style="display:none">
+                    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+                    <div class="progress-text" id="progress-text">Sending...</div>
+                </div>
+                <div class="form-status" id="composer-status"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ATS: Add/Edit Employer Modal -->
+    <div class="modal-overlay" id="employer-modal-overlay">
+        <div class="modal-card">
+            <button class="modal-close" id="employer-modal-close">&times;</button>
+            <h2 class="modal-title" id="employer-modal-title">Add Employer</h2>
+            <form id="employer-form" autocomplete="off">
+                <input type="hidden" id="emp-id">
+                <div class="form-group">
+                    <label>Name *</label>
+                    <input type="text" id="emp-name" placeholder="e.g. Gunderson Dettmer" required>
+                </div>
+                <div class="form-group">
+                    <label>Website</label>
+                    <input type="text" id="emp-website" placeholder="https://...">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>City</label>
+                        <input type="text" id="emp-city" placeholder="Boston">
+                    </div>
+                    <div class="form-group">
+                        <label>State</label>
+                        <input type="text" id="emp-state" placeholder="Massachusetts">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="emp-notes" rows="3" placeholder="Optional notes..."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" id="employer-modal-cancel">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Employer</button>
+                </div>
+                <div class="form-status" id="employer-modal-status"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ATS: Add/Edit Job Modal -->
+    <div class="modal-overlay" id="job-modal-overlay">
+        <div class="modal-card modal-composer">
+            <button class="modal-close" id="job-modal-close">&times;</button>
+            <h2 class="modal-title" id="job-modal-title">Add Job</h2>
+            <form id="job-form" autocomplete="off">
+                <input type="hidden" id="job-id">
+                <div class="form-group">
+                    <label>Employer *</label>
+                    <select id="job-employer" required>
+                        <option value="">Select employer...</option>
+                    </select>
+                    <button type="button" class="cc-toggle" id="btn-job-new-employer" style="margin-top:4px">+ Add New Employer</button>
+                </div>
+                <div class="form-group">
+                    <label>Title *</label>
+                    <input type="text" id="job-title" placeholder="e.g. Fund Formation Associate" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Location</label>
+                        <input type="text" id="job-location" placeholder="Boston, MA">
+                    </div>
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select id="job-status">
+                            <option value="Active">Active</option>
+                            <option value="On Hold">On Hold</option>
+                            <option value="Filled">Filled</option>
+                            <option value="Closed">Closed</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Practice Area</label>
+                        <input type="text" id="job-practice-area" placeholder="Corporate">
+                    </div>
+                    <div class="form-group">
+                        <label>Specialty</label>
+                        <input type="text" id="job-specialty" placeholder="Fund Formation">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Grad Year Min</label>
+                        <input type="number" id="job-grad-min" placeholder="2021">
+                    </div>
+                    <div class="form-group">
+                        <label>Grad Year Max</label>
+                        <input type="number" id="job-grad-max" placeholder="2022">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Salary Min</label>
+                        <input type="number" id="job-salary-min" placeholder="310000">
+                    </div>
+                    <div class="form-group">
+                        <label>Salary Max</label>
+                        <input type="number" id="job-salary-max" placeholder="365000">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Bar Required</label>
+                    <input type="text" id="job-bar" placeholder="Massachusetts">
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="job-description" rows="6" placeholder="Full job description..."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" id="job-modal-cancel">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Job</button>
+                </div>
+                <div class="form-status" id="job-modal-status"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ATS: Add to Pipeline Modal -->
+    <div class="modal-overlay" id="pipeline-add-overlay">
+        <div class="modal-card">
+            <button class="modal-close" id="pipeline-add-close">&times;</button>
+            <h2 class="modal-title" id="pipeline-add-title">Add to Pipeline</h2>
+            <form id="pipeline-add-form" autocomplete="off">
+                <div class="form-group">
+                    <label>Job *</label>
+                    <select id="pipeline-add-job" required>
+                        <option value="">Select a job...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Initial Stage</label>
+                    <select id="pipeline-add-stage">
+                        <option value="Identified" selected>Identified</option>
+                        <option value="Contacted">Contacted</option>
+                        <option value="Responded">Responded</option>
+                        <option value="Phone Screen">Phone Screen</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Placement Fee ($)</label>
+                    <input type="number" id="pipeline-add-fee" min="0" step="500" placeholder="e.g. 25000" style="width:100%">
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="pipeline-add-notes" rows="3" placeholder="Optional notes..."></textarea>
+                </div>
+                <div id="pipeline-add-warnings"></div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" id="pipeline-add-cancel">Cancel</button>
+                    <button type="submit" class="btn-primary">Add to Pipeline</button>
+                </div>
+                <div class="form-status" id="pipeline-add-status"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ATS: Stage Move Prompt Modal -->
+    <div class="modal-overlay" id="stage-move-overlay">
+        <div class="modal-card">
+            <button class="modal-close" id="stage-move-close">&times;</button>
+            <h2 class="modal-title" id="stage-move-title">Move Candidate</h2>
+            <form id="stage-move-form">
+                <div class="form-group">
+                    <label id="stage-move-label">Note</label>
+                    <textarea id="stage-move-note" rows="3" placeholder="Optional..."></textarea>
+                </div>
+                <div class="form-group" id="stage-move-date-group" style="display:none">
+                    <label>Start Date</label>
+                    <input type="date" id="stage-move-date">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" id="stage-move-cancel">Cancel</button>
+                    <button type="submit" class="btn-primary">Confirm Move</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Job Detail Modal -->
+    <div class="modal-overlay" id="job-detail-overlay">
+        <div class="modal-card modal-composer">
+            <button class="modal-close" id="job-detail-close">&times;</button>
+            <div id="job-detail-content"></div>
+        </div>
+    </div>
+
+    <!-- Job Search Floating Action Bar -->
+    <div class="floating-action-bar job-floating-bar-fixed" id="job-floating-bar" style="display:none">
+        <span class="fab-count" id="job-fab-count">0 selected</span>
+        <button class="fab-btn fab-btn-primary" id="job-fab-find-attorneys">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            Find Attorneys for All
+        </button>
+        <button class="fab-btn" id="job-fab-add-ats">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><path d="M12 14v4M10 16h4"/></svg>
+            Add to ATS
+        </button>
+        <button class="fab-btn fab-btn-clear" id="job-fab-clear">Clear</button>
+    </div>
+
+    <!-- ATS: Add Candidate Search Modal -->
+    <div class="modal-overlay" id="candidate-search-overlay">
+        <div class="modal-card modal-composer">
+            <button class="modal-close" id="candidate-search-close">&times;</button>
+            <h2 class="modal-title">Add Candidate to Pipeline</h2>
+            <div class="form-group">
+                <label>Search Attorneys</label>
+                <input type="text" id="candidate-search-input" placeholder="Search by name...">
+            </div>
+            <div id="candidate-search-results"></div>
+            <div class="form-actions">
+                <button type="button" class="btn-secondary" id="candidate-search-cancel">Cancel</button>
+                <button type="button" class="btn-primary" id="candidate-search-add" disabled>Add Selected</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pitch PDF Modal -->
+    <div class="modal-overlay" id="pitch-modal-overlay">
+        <div class="modal-card modal-composer">
+            <button class="modal-close" id="pitch-modal-close">&times;</button>
+            <h2 class="modal-title">Generate Candidate Pitch PDF</h2>
+            <form id="pitch-form">
+                <div class="form-group">
+                    <label>Candidate</label>
+                    <input type="text" id="pitch-candidate-name" readonly class="input-readonly">
+                    <input type="hidden" id="pitch-attorney-id">
+                    <input type="hidden" id="pitch-pipeline-id">
+                </div>
+                <div class="form-group">
+                    <label>Job</label>
+                    <select id="pitch-job-select">
+                        <option value="">-- Select a job --</option>
+                    </select>
+                </div>
+                <div class="form-group form-row">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="pitch-anonymize" checked>
+                        Anonymize candidate (hide name &amp; firm)
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>Focus / Angle <span class="optional-label">(optional)</span></label>
+                    <input type="text" id="pitch-focus" placeholder="e.g. Emphasize their SEC enforcement experience">
+                </div>
+                <div class="form-group">
+                    <label>Sections to Include</label>
+                    <div class="pitch-sections">
+                        <label class="checkbox-label"><input type="checkbox" name="pitch-sec" value="job_overview" checked> Job Overview</label>
+                        <label class="checkbox-label"><input type="checkbox" name="pitch-sec" value="fit_narrative" checked> Fit Narrative</label>
+                        <label class="checkbox-label"><input type="checkbox" name="pitch-sec" value="feeder_charts" checked> Feeder Charts</label>
+                        <label class="checkbox-label"><input type="checkbox" name="pitch-sec" value="career_trajectory" checked> Career Trajectory</label>
+                        <label class="checkbox-label"><input type="checkbox" name="pitch-sec" value="custom_angle" checked> Custom Angle</label>
+                        <label class="checkbox-label"><input type="checkbox" name="pitch-sec" value="closing_hook" checked> Closing Hook</label>
+                    </div>
+                </div>
+                <details class="pitch-branding-details">
+                    <summary>Recruiter Branding</summary>
+                    <div class="form-group">
+                        <label>Logo</label>
+                        <input type="file" id="pitch-logo-upload" accept="image/png,image/jpeg">
+                    </div>
+                    <div class="form-group">
+                        <label>Name</label>
+                        <input type="text" id="pitch-recruiter-name" placeholder="Your name">
+                    </div>
+                    <div class="form-group">
+                        <label>Title</label>
+                        <input type="text" id="pitch-recruiter-title" placeholder="Your title">
+                    </div>
+                    <div class="form-group">
+                        <label>Contact</label>
+                        <input type="text" id="pitch-recruiter-contact" placeholder="Email or phone">
+                    </div>
+                </details>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" id="pitch-cancel">Cancel</button>
+                    <button type="submit" class="btn-primary" id="pitch-submit">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                        Generate PDF
+                    </button>
+                </div>
+            </form>
+            <div id="pitch-loading" class="pitch-loading" style="display:none">
+                <div class="spinner"></div>
+                <span>Generating pitch PDF... this may take 15-30 seconds</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Compare: Context Modal -->
+    <div class="modal-overlay" id="compare-context-overlay">
+        <div class="modal-card compare-context-card">
+            <button class="modal-close" id="compare-context-close">&times;</button>
+            <h2 class="modal-title">Compare Candidates</h2>
+            <div id="compare-candidates-preview" class="compare-candidates-preview"></div>
+            <form id="compare-context-form" autocomplete="off">
+                <div class="form-group">
+                    <label>Job / Role <span class="form-optional">(optional)</span></label>
+                    <select id="compare-job-select">
+                        <option value="">No specific job</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Comparison Priorities</label>
+                    <div class="compare-priority-grid">
+                        <label class="compare-priority-item"><input type="checkbox" value="compensation" checked> Compensation</label>
+                        <label class="compare-priority-item"><input type="checkbox" value="practice" checked> Practice Fit</label>
+                        <label class="compare-priority-item"><input type="checkbox" value="culture" checked> Firm Culture</label>
+                        <label class="compare-priority-item"><input type="checkbox" value="client_book"> Client Book</label>
+                        <label class="compare-priority-item"><input type="checkbox" value="pedigree" checked> Pedigree</label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Custom Note <span class="form-optional">(optional)</span></label>
+                    <textarea id="compare-custom-note" rows="2" placeholder="e.g. Client prefers BigLaw background, must be barred in NY…"></textarea>
+                </div>
+                <div class="form-actions compare-form-actions">
+                    <button type="button" class="btn-secondary" id="compare-context-cancel">Cancel</button>
+                    <button type="button" class="btn-secondary" id="compare-quick-btn">Quick Compare</button>
+                    <button type="submit" class="btn-primary" id="compare-ai-btn">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                        AI Deep Compare
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Compare: Full-Screen Results Overlay -->
+    <div class="compare-results-overlay" id="compare-results-overlay">
+        <div class="compare-results-header">
+            <button class="compare-back-btn" id="compare-back-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+                Back
+            </button>
+            <h1 class="compare-results-title" id="compare-results-title">Candidate Comparison</h1>
+            <div class="compare-results-header-actions">
+                <button class="btn-secondary" id="compare-pdf-btn">
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M4 7l4 4 4-4M2 12v2h12v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    Export PDF
+                </button>
+            </div>
+        </div>
+        <div class="compare-results-body" id="compare-results-body"></div>
+    </div>
+
+    <!-- Toast notification -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="/static/script.js?v=4"></script>
+    <script src="/static/ats.js?v=4"></script>
+    <script src="/static/jobsearch.js?v=3"></script>
+    <script src="/static/firms.js?v=3"></script>
+    <script src="/static/compare.js?v=1"></script>
+
+{% else %}
+
+    <!-- ===== MARKETING PAGE ===== -->
+    <div class="mkt-page">
+
+        <!-- Marketing Nav -->
+        <nav class="mkt-nav">
+            <div class="mkt-nav-inner">
+                <a href="#" class="mkt-nav-logo">
+                    <img src="/static/jaide-ats-logo.png" alt="JAIDE ATS" class="mkt-logo-img">
+                </a>
+                <div class="mkt-nav-links">
+                    <a href="#features" class="mkt-nav-link">Features</a>
+                    <a href="#for-recruiters" class="mkt-nav-link">For Recruiters</a>
+                    <a href="#pricing" class="mkt-nav-link">Pricing</a>
+                    <a href="#about" class="mkt-nav-link">About</a>
+                </div>
+                <div class="mkt-nav-actions">
+                    <button class="mkt-btn-outline" data-action="open-login">Sign In</button>
+                    <button class="mkt-btn-primary" data-action="open-login">Request Demo</button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Hero -->
+        <section class="mkt-hero">
+            <!-- Text content -->
+            <div class="mkt-hero-text">
+                <p class="mkt-hero-tagline">AI-Powered ATS for Legal Search</p>
+                <h1 class="mkt-hero-headline">The Recruiting Platform Built for Legal Search Firms</h1>
+                <p class="mkt-hero-sub">Surface top candidates faster, track every deal, and close more placements with the only ATS designed specifically for legal recruiting.</p>
+                <div class="mkt-hero-ctas">
+                    <button class="mkt-cta-primary" data-action="open-login">Get Started</button>
+                    <button class="mkt-cta-secondary" data-action="open-login">Request Demo</button>
+                </div>
+            </div>
+
+            <!-- Product mockup — overlaps into features section below -->
+            <div class="mkt-hero-mockup-wrap">
+                <div class="mkt-browser-frame">
+                    <!-- Browser chrome -->
+                    <div class="mkt-browser-bar">
+                        <div class="mkt-browser-dots">
+                            <span></span><span></span><span></span>
+                        </div>
+                        <div class="mkt-browser-urlbar">jaide-ats.firmprospects.com/dashboard</div>
+                        <div class="mkt-browser-bar-spacer"></div>
+                    </div>
+                    <!-- App content -->
+                    <div class="mkt-browser-content">
+                        <!-- App nav -->
+                        <div class="mkt-dash-nav">
+                            <img src="/static/jaide-ats-logo.png" alt="JAIDE ATS" class="mkt-dash-logo-img">
+                            <div class="mkt-dash-nav-tabs">
+                                <span class="mkt-dash-tab mkt-dash-tab-active">Dashboard</span>
+                                <span class="mkt-dash-tab">Jobs</span>
+                                <span class="mkt-dash-tab">Attorneys</span>
+                                <span class="mkt-dash-tab">Firms</span>
+                            </div>
+                            <div class="mkt-dash-nav-avatar">AD</div>
+                        </div>
+                        <!-- Metric cards -->
+                        <div class="mkt-dash-metrics">
+                            <div class="mkt-dash-metric">
+                                <div class="mkt-dash-metric-val">12</div>
+                                <div class="mkt-dash-metric-lbl">Active Jobs</div>
+                            </div>
+                            <div class="mkt-dash-metric">
+                                <div class="mkt-dash-metric-val">47</div>
+                                <div class="mkt-dash-metric-lbl">In Pipeline</div>
+                            </div>
+                            <div class="mkt-dash-metric">
+                                <div class="mkt-dash-metric-val">8</div>
+                                <div class="mkt-dash-metric-lbl">Interviews</div>
+                            </div>
+                            <div class="mkt-dash-metric mkt-metric-green">
+                                <div class="mkt-dash-metric-val mkt-metric-val-green">3</div>
+                                <div class="mkt-dash-metric-lbl">Placements</div>
+                            </div>
+                        </div>
+                        <!-- Pipeline board header -->
+                        <div class="mkt-dash-board-hd">
+                            <span class="mkt-dash-board-title">Pipeline Board</span>
+                            <span class="mkt-dash-add-btn">+ Add Candidate</span>
+                        </div>
+                        <!-- Kanban columns -->
+                        <div class="mkt-dash-kanban">
+                            <div class="mkt-dash-col">
+                                <div class="mkt-dash-col-hd mkt-col-hd-blue">Identified <span>8</span></div>
+                                <div class="mkt-dash-card">
+                                    <div class="mkt-card-top"><span class="mkt-card-name">Sarah Chen</span><span class="mkt-tier mkt-tier-1p">T1+</span></div>
+                                    <div class="mkt-card-firm">Kirkland &amp; Ellis</div>
+                                </div>
+                                <div class="mkt-dash-card">
+                                    <div class="mkt-card-top"><span class="mkt-card-name">Michael Park</span><span class="mkt-tier mkt-tier-1">T1</span></div>
+                                    <div class="mkt-card-firm">Latham &amp; Watkins</div>
+                                </div>
+                                <div class="mkt-dash-card">
+                                    <div class="mkt-card-top"><span class="mkt-card-name">Alex Rivera</span><span class="mkt-tier mkt-tier-2">T2</span></div>
+                                    <div class="mkt-card-firm">Paul Weiss</div>
+                                </div>
+                            </div>
+                            <div class="mkt-dash-col">
+                                <div class="mkt-dash-col-hd mkt-col-hd-blue">Contacted <span>6</span></div>
+                                <div class="mkt-dash-card">
+                                    <div class="mkt-card-top"><span class="mkt-card-name">Priya Sharma</span><span class="mkt-tier mkt-tier-1p">T1+</span></div>
+                                    <div class="mkt-card-firm">Cleary Gottlieb</div>
+                                </div>
+                                <div class="mkt-dash-card">
+                                    <div class="mkt-card-top"><span class="mkt-card-name">David Kim</span><span class="mkt-tier mkt-tier-1">T1</span></div>
+                                    <div class="mkt-card-firm">Davis Polk</div>
+                                </div>
+                            </div>
+                            <div class="mkt-dash-col">
+                                <div class="mkt-dash-col-hd mkt-col-hd-blue">Phone Screen <span>4</span></div>
+                                <div class="mkt-dash-card mkt-dash-card-blue">
+                                    <div class="mkt-card-top"><span class="mkt-card-name">Lisa Wang</span><span class="mkt-tier mkt-tier-1p">T1+</span></div>
+                                    <div class="mkt-card-firm">Weil Gotshal</div>
+                                </div>
+                                <div class="mkt-dash-card">
+                                    <div class="mkt-card-top"><span class="mkt-card-name">Chris Lee</span><span class="mkt-tier mkt-tier-1">T1</span></div>
+                                    <div class="mkt-card-firm">Cravath</div>
+                                </div>
+                            </div>
+                            <div class="mkt-dash-col">
+                                <div class="mkt-dash-col-hd mkt-col-hd-blue">Submitted <span>3</span></div>
+                                <div class="mkt-dash-card mkt-dash-card-blue">
+                                    <div class="mkt-card-top"><span class="mkt-card-name">Maya Patel</span><span class="mkt-tier mkt-tier-1p">T1+</span></div>
+                                    <div class="mkt-card-firm">Sullivan &amp; Cromwell</div>
+                                </div>
+                                <div class="mkt-dash-card">
+                                    <div class="mkt-card-top"><span class="mkt-card-name">Ryan Chen</span><span class="mkt-tier mkt-tier-1">T1</span></div>
+                                    <div class="mkt-card-firm">Gibson Dunn</div>
+                                </div>
+                            </div>
+                            <div class="mkt-dash-col">
+                                <div class="mkt-dash-col-hd mkt-col-hd-blue">Interview <span>5</span></div>
+                                <div class="mkt-dash-card mkt-dash-card-blue">
+                                    <div class="mkt-card-top"><span class="mkt-card-name">Jessica Lin</span><span class="mkt-tier mkt-tier-1p">T1+</span></div>
+                                    <div class="mkt-card-firm">Sidley Austin</div>
+                                </div>
+                                <div class="mkt-dash-card">
+                                    <div class="mkt-card-top"><span class="mkt-card-name">Omar Hassan</span><span class="mkt-tier mkt-tier-1">T1</span></div>
+                                    <div class="mkt-card-firm">Skadden Arps</div>
+                                </div>
+                            </div>
+                            <div class="mkt-dash-col">
+                                <div class="mkt-dash-col-hd mkt-col-hd-green">Placed <span>3</span></div>
+                                <div class="mkt-dash-card mkt-dash-card-green">
+                                    <div class="mkt-card-top"><span class="mkt-card-name">Kevin Zhang</span><span class="mkt-tier mkt-tier-1p">T1+</span></div>
+                                    <div class="mkt-card-firm">Milbank</div>
+                                    <div class="mkt-card-fee">$95,000</div>
+                                </div>
+                                <div class="mkt-dash-card mkt-dash-card-green">
+                                    <div class="mkt-card-top"><span class="mkt-card-name">Aisha Johnson</span><span class="mkt-tier mkt-tier-1">T1</span></div>
+                                    <div class="mkt-card-firm">Willkie Farr</div>
+                                    <div class="mkt-card-fee">$85,000</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features -->
+        <section class="mkt-features" id="features">
+            <div class="mkt-section-inner">
+                <h2 class="mkt-section-title">Everything you need to place top legal talent</h2>
+                <p class="mkt-section-sub">JAIDE ATS is purpose-built for the complexity of legal recruiting — from BigLaw to boutique.</p>
+                <div class="mkt-features-grid">
+                    <div class="mkt-feature-card">
+                        <div class="mkt-feature-icon">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0059FF" stroke-width="2" stroke-linecap="round"><path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z"/></svg>
+                        </div>
+                        <h3>AI-Powered Candidate Matching</h3>
+                        <p>Paste any job description and instantly surface ranked, tiered candidates matched against practice area, school, and firm signals.</p>
+                    </div>
+                    <div class="mkt-feature-card">
+                        <div class="mkt-feature-icon">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0059FF" stroke-width="2" stroke-linecap="round"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/><path d="M9 9h1M9 13h1M9 17h1"/></svg>
+                        </div>
+                        <h3>Legal-Specific Intelligence</h3>
+                        <p>Built-in hiring DNA analysis reveals which law schools and feeder firms each target firm actually hires from — giving you the edge.</p>
+                    </div>
+                    <div class="mkt-feature-card">
+                        <div class="mkt-feature-icon">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0059FF" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+                        </div>
+                        <h3>Full Pipeline Management</h3>
+                        <p>Kanban-style pipeline board tracks every candidate from Identified to Placed. Log notes, set fees, and monitor stage velocity.</p>
+                    </div>
+                    <div class="mkt-feature-card">
+                        <div class="mkt-feature-icon">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0059FF" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                        </div>
+                        <h3>Client CRM &amp; Firm Intelligence</h3>
+                        <p>Manage client contacts, log relationship notes, and access deep firm profiles — all without leaving your recruiting workflow.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- How It Works -->
+        <section class="mkt-how" id="for-recruiters">
+            <div class="mkt-section-inner">
+                <h2 class="mkt-section-title">How JAIDE ATS works</h2>
+                <p class="mkt-section-sub">From first search to final placement in three steps.</p>
+                <div class="mkt-steps">
+                    <div class="mkt-step">
+                        <div class="mkt-step-num">1</div>
+                        <h3>Describe the Role</h3>
+                        <p>Paste a job description or describe the position in plain language. Our AI extracts practice area, experience level, and firm signals automatically.</p>
+                    </div>
+                    <div class="mkt-step-arrow">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#EDEDED" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    </div>
+                    <div class="mkt-step">
+                        <div class="mkt-step-num">2</div>
+                        <h3>Surface Ranked Candidates</h3>
+                        <p>JAIDE ranks and tiers candidates by fit — Tier 1+ bull's-eyes to Tier 3 adjacent profiles — with reasoning you can show clients.</p>
+                    </div>
+                    <div class="mkt-step-arrow">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#EDEDED" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    </div>
+                    <div class="mkt-step">
+                        <div class="mkt-step-num">3</div>
+                        <h3>Track &amp; Close</h3>
+                        <p>Add candidates to your pipeline, move them through stages, generate pitch PDFs for clients, and log the placement fee when they're hired.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Built for Legal Search -->
+        <section class="mkt-built-for">
+            <div class="mkt-section-inner mkt-built-for-inner">
+                <div class="mkt-built-for-text">
+                    <h2>Built for the way legal search firms actually work</h2>
+                    <p>Most ATS platforms are built for high-volume corporate recruiting. JAIDE ATS is designed around the way legal search firms operate — with the intelligence, precision, and client-facing tools you need.</p>
+                    <ul class="mkt-checklist">
+                        <li>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0059FF" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                            Tier candidates by fit, not just keyword match
+                        </li>
+                        <li>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0059FF" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                            Hiring DNA reveals true feeder patterns
+                        </li>
+                        <li>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0059FF" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                            Generate branded candidate pitch PDFs in seconds
+                        </li>
+                        <li>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0059FF" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                            Track pipeline value and placement fees
+                        </li>
+                        <li>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0059FF" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                            Send personalized outreach from within the platform
+                        </li>
+                        <li>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0059FF" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                            Works across BigLaw, boutique, in-house, and government
+                        </li>
+                    </ul>
+                    <button class="mkt-cta-primary" data-action="open-login" style="margin-top:32px;">See It in Action</button>
+                </div>
+                <div class="mkt-built-for-visual">
+                    <div class="mkt-mock-card">
+                        <div class="mkt-mock-header">
+                            <span class="mkt-mock-dot mkt-mock-dot-red"></span>
+                            <span class="mkt-mock-dot mkt-mock-dot-yellow"></span>
+                            <span class="mkt-mock-dot mkt-mock-dot-green"></span>
+                            <span class="mkt-mock-title">JAIDE ATS — Candidate Results</span>
+                        </div>
+                        <div class="mkt-mock-body">
+                            <div class="mkt-mock-tier mkt-mock-tier-1plus">Tier 1+ &bull; Bull's-Eye Match</div>
+                            <div class="mkt-mock-row">
+                                <div class="mkt-mock-name">Alexandra Chen</div>
+                                <div class="mkt-mock-firm">Kirkland &amp; Ellis → Latham</div>
+                            </div>
+                            <div class="mkt-mock-detail">Harvard Law · NY Bar · M&amp;A, PE · 2019</div>
+                            <div class="mkt-mock-tier mkt-mock-tier-1" style="margin-top:14px;">Tier 1 &bull; Strong Fit</div>
+                            <div class="mkt-mock-row">
+                                <div class="mkt-mock-name">Marcus Williams</div>
+                                <div class="mkt-mock-firm">Skadden → Paul Weiss</div>
+                            </div>
+                            <div class="mkt-mock-detail">Columbia Law · NY Bar · Corporate · 2020</div>
+                            <div class="mkt-mock-tier mkt-mock-tier-2" style="margin-top:14px;">Tier 2 &bull; Solid Fit</div>
+                            <div class="mkt-mock-row">
+                                <div class="mkt-mock-name">Sarah Okonkwo</div>
+                                <div class="mkt-mock-firm">Cleary → Davis Polk</div>
+                            </div>
+                            <div class="mkt-mock-detail">Yale Law · NY Bar · Finance · 2021</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Social Proof -->
+        <section class="mkt-social-proof">
+            <div class="mkt-section-inner">
+                <p class="mkt-social-label">Trusted by legal search professionals at</p>
+                <div class="mkt-logos-row">
+                    <div class="mkt-logo-placeholder">AmLaw 100 Firms</div>
+                    <div class="mkt-logo-placeholder">Boutique Practices</div>
+                    <div class="mkt-logo-placeholder">In-House Teams</div>
+                    <div class="mkt-logo-placeholder">Search Boutiques</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Pricing -->
+        <section class="mkt-pricing" id="pricing">
+            <div class="mkt-section-inner">
+                <h2 class="mkt-section-title">Simple, transparent pricing</h2>
+                <p class="mkt-section-sub">No per-seat surprises. Built for small teams and growing practices.</p>
+                <div class="mkt-pricing-grid">
+                    <div class="mkt-pricing-card">
+                        <div class="mkt-pricing-name">Starter</div>
+                        <div class="mkt-pricing-price">$299<span>/mo</span></div>
+                        <div class="mkt-pricing-desc">For solo recruiters and small firms just getting started.</div>
+                        <ul class="mkt-pricing-features">
+                            <li>Up to 3 users</li>
+                            <li>AI candidate matching</li>
+                            <li>Pipeline management</li>
+                            <li>Email outreach</li>
+                        </ul>
+                        <button class="mkt-btn-outline mkt-pricing-btn" data-action="open-login">Get Started</button>
+                    </div>
+                    <div class="mkt-pricing-card mkt-pricing-featured">
+                        <div class="mkt-pricing-badge">Most Popular</div>
+                        <div class="mkt-pricing-name">Professional</div>
+                        <div class="mkt-pricing-price">$599<span>/mo</span></div>
+                        <div class="mkt-pricing-desc">For growing search firms managing multiple clients and pipelines.</div>
+                        <ul class="mkt-pricing-features">
+                            <li>Up to 10 users</li>
+                            <li>Everything in Starter</li>
+                            <li>Hiring DNA analysis</li>
+                            <li>Pitch PDF generation</li>
+                            <li>Firm CRM &amp; contacts</li>
+                            <li>Priority support</li>
+                        </ul>
+                        <button class="mkt-btn-primary mkt-pricing-btn" data-action="open-login">Get Started</button>
+                    </div>
+                    <div class="mkt-pricing-card">
+                        <div class="mkt-pricing-name">Enterprise</div>
+                        <div class="mkt-pricing-price">Custom</div>
+                        <div class="mkt-pricing-desc">For large teams with custom data, integrations, and white-labeling needs.</div>
+                        <ul class="mkt-pricing-features">
+                            <li>Unlimited users</li>
+                            <li>Everything in Professional</li>
+                            <li>Custom data integration</li>
+                            <li>White-label options</li>
+                            <li>Dedicated account manager</li>
+                        </ul>
+                        <button class="mkt-btn-outline mkt-pricing-btn" data-action="open-login">Contact Sales</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="mkt-footer" id="about">
+            <div class="mkt-footer-inner">
+                <div class="mkt-footer-col">
+                    <img src="/static/jaide-ats-logo.png" alt="JAIDE ATS" class="mkt-logo-img mkt-logo-footer">
+                    <p class="mkt-footer-tagline">AI-Powered ATS for Legal Search</p>
+                </div>
+                <div class="mkt-footer-col">
+                    <div class="mkt-footer-heading">Product</div>
+                    <a href="#features" class="mkt-footer-link">Features</a>
+                    <a href="#pricing" class="mkt-footer-link">Pricing</a>
+                    <a href="#for-recruiters" class="mkt-footer-link">For Recruiters</a>
+                </div>
+                <div class="mkt-footer-col">
+                    <div class="mkt-footer-heading">Company</div>
+                    <a href="#about" class="mkt-footer-link">About</a>
+                    <a href="#" class="mkt-footer-link">Contact</a>
+                    <a href="#" class="mkt-footer-link">Privacy Policy</a>
+                </div>
+            </div>
+            <div class="mkt-footer-bottom">
+                <span>&copy; 2026 Firm Prospects. All rights reserved.</span>
+            </div>
+        </footer>
+
+    </div>
+
+    <!-- Login Modal -->
+    <div class="mkt-login-overlay" id="mkt-login-overlay" style="display:none">
+        <div class="mkt-login-card">
+            <button class="mkt-login-close" onclick="document.getElementById('mkt-login-overlay').style.display='none'">&times;</button>
+            <div class="mkt-login-logo">
+                <img src="/static/jaide-ats-logo.png" alt="JAIDE ATS" class="mkt-logo-img mkt-logo-modal">
+            </div>
+            <h2 class="mkt-login-title">Sign in to JAIDE ATS</h2>
+            <form id="mkt-login-form" autocomplete="off">
+                <div class="mkt-login-field">
+                    <label for="mkt-email">Email address</label>
+                    <input type="email" id="mkt-email" name="email" placeholder="you@firmprospects.com" autocomplete="email" required>
+                </div>
+                <div class="mkt-login-field">
+                    <label for="mkt-password">Password</label>
+                    <div class="mkt-pw-wrap">
+                        <input type="password" id="mkt-password" name="password" placeholder="••••••••" autocomplete="current-password" required>
+                        <button type="button" class="mkt-toggle-pw" id="mkt-toggle-pw" tabindex="-1" aria-label="Show password">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="mkt-login-error" id="mkt-login-error"></div>
+                <button type="submit" class="mkt-btn-primary mkt-login-submit">Sign In</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast notification -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="/static/marketing.js"></script>
+
+{% endif %}
+
+</body>
+</html>
