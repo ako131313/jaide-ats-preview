@@ -182,7 +182,9 @@ Rules:
 # Data loading – runs once on startup
 # ---------------------------------------------------------------------------
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-_ATTORNEY_CSV_PATH = os.path.join(DATA_DIR, "attorneys.csv")
+_ATTORNEY_CSV_FULL = os.path.join(DATA_DIR, "attorneys.csv")
+_ATTORNEY_CSV_SLIM = os.path.join(DATA_DIR, "attorneys_slim.csv")
+_ATTORNEY_CSV_PATH = _ATTORNEY_CSV_FULL if os.path.exists(_ATTORNEY_CSV_FULL) else _ATTORNEY_CSV_SLIM
 
 # Columns to load from the attorneys CSV. Heavy unused columns (attorneyBio,
 # matters, fullbio_with_tags, matters_with_tags, prior_experience_with_tags,
