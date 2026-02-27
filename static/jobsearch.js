@@ -11,6 +11,7 @@
     let currentJobs = [];
     let selectedJobIds = new Set();
     let lastQuery = "";
+    let _jobSourceFilter = "all";
 
     // DOM refs (lazy — elements may not exist immediately)
     function jobResultsContent() { return document.getElementById("job-results-content"); }
@@ -121,7 +122,11 @@
         content.style.display = "block";
         if (placeholder) placeholder.style.display = "none";
 
-        const jobs = data.jobs || [];
+        let jobs = data.jobs || [];
+        // Apply source filter
+        if (_jobSourceFilter !== "all") {
+            jobs = jobs.filter(j => (j.source || "fp") === _jobSourceFilter);
+        }
         title.textContent = "Job Search Results";
         count.textContent = `${jobs.length} of ${data.total_jobs || "?"} jobs`;
 
@@ -138,6 +143,43 @@
 
         updateJobFloatingBar();
     }
+
+    // Source filter for jobs
+    const jobSourceFilterEl = document.getElementById("job-source-filter");
+    if (jobSourceFilterEl) {
+        jobSourceFilterEl.addEventListener("sourceFilterChange", (e) => {
+            _jobSourceFilter = e.detail.source;
+            // Re-render with current jobs filtered
+            renderJobResults({ jobs: currentJobs, total_jobs: currentJobs.length });
+        });
+    }
+
+    // Refresh on custom record changes
+    window.addEventListener("customRecordSaved", (e) => {
+        if (e.detail && e.detail.type === "job") {
+            // Re-run last query or reload custom jobs
+            fetch("/api/custom/jobs").then(r => r.json()).then(data => {
+                const customJobs = (data.jobs || []).map(j => ({
+                    id: `custom_${j.id}`, firm_name: j.firm_name,
+                    job_title: j.job_title, job_location: j.location,
+                    job_description: j.job_description, practice_areas: j.practice_areas,
+                    specialty: j.specialty, min_years: j.min_years, max_years: j.max_years,
+                    status: j.status, source: "custom"
+                }));
+                // Merge with current FP jobs
+                const fpJobs = currentJobs.filter(j => (j.source || "fp") === "fp");
+                currentJobs = [...customJobs, ...fpJobs];
+                renderJobResults({ jobs: currentJobs, total_jobs: currentJobs.length });
+            });
+        }
+    });
+    window.addEventListener("customRecordDeleted", (e) => {
+        if (e.detail && e.detail.type === "job") {
+            const deletedId = `custom_${e.detail.id}`;
+            currentJobs = currentJobs.filter(j => String(j.id) !== deletedId);
+            renderJobResults({ jobs: currentJobs, total_jobs: currentJobs.length });
+        }
+    });
 
     // ---- Job Card ----
     function createJobCard(job, index) {
@@ -186,6 +228,7 @@
                         <div class="job-card-title-row">
                             <a class="job-card-title" data-job-idx="${index}">${esc(job.job_title)}</a>
                             <span class="job-status-pill ${statusCls}">${esc(job.status || "Open")}</span>
+                            ${job.source === 'custom' ? '<span class="source-badge source-badge-custom">Custom</span>' : '<span class="source-badge source-badge-fp">FP</span>'}
                         </div>
                         <div class="job-card-firm">${esc(job.firm_name)}</div>
                         <div class="job-card-meta">
@@ -208,6 +251,7 @@
                     <button class="job-card-btn" data-action="view-detail" data-job-idx="${index}">
                         View Details
                     </button>
+                    ${job.source === 'custom' ? `<button class="job-card-btn" data-action="edit-custom" data-job-idx="${index}">Edit</button><button class="job-card-btn" style="color:#ef4444" data-action="delete-custom" data-job-idx="${index}">Delete</button>` : ''}
                 </div>
             </div>`;
 
@@ -244,6 +288,16 @@
                     addJobToATS(j, btn);
                 } else if (action === "view-detail") {
                     openJobDetail(j);
+                } else if (action === "edit-custom") {
+                    const rawId = String(j.id || "").replace("custom_", "");
+                    fetch(`/api/custom/jobs/${rawId}`).then(r => r.json()).then(data => {
+                        if (data.job && window.JAIDE && window.JAIDE.openCustomJobModal) window.JAIDE.openCustomJobModal(data.job);
+                    });
+                } else if (action === "delete-custom") {
+                    const rawId = String(j.id || "").replace("custom_", "");
+                    if (window.JAIDE && window.JAIDE.deleteCustomRecord) {
+                        window.JAIDE.deleteCustomRecord("jobs", rawId, j.job_title || "this job");
+                    }
                 }
             });
         });

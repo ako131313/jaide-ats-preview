@@ -38,6 +38,7 @@
     let useAI = true;
     let hasResults = false;
     let searchMode = "attorney"; // "attorney" or "job"
+    let attySourceFilter = "all"; // "all", "fp", "custom"
 
     // ---- Selection state ----
     const selectedCandidates = new Set(); // indices into currentSortedCandidates
@@ -102,10 +103,11 @@
         // Deactivate all tabs
         document.querySelectorAll(".nav-tab").forEach(t => t.classList.remove("active"));
 
-        if (viewName === "home") {
+        if (viewName === "home" || viewName === "dashboard") {
             // post-login: home → dashboard
             viewName = "dashboard";
-        } else if (viewName === "dashboard") {
+        }
+        if (viewName === "dashboard") {
             document.getElementById("view-dashboard").classList.add("view-active");
             const tab = document.querySelector('[data-view="dashboard"]');
             if (tab) tab.classList.add("active");
@@ -131,8 +133,22 @@
             const tab = document.querySelector('[data-view="firms"]');
             if (tab) tab.classList.add("active");
             if (window.JAIDE && window.JAIDE.loadFirms) window.JAIDE.loadFirms();
+        } else if (viewName === "pipeline") {
+            const pipelineView = document.getElementById("view-pipeline");
+            if (pipelineView) pipelineView.classList.add("view-active");
+            const tab = document.querySelector('[data-view="pipeline"]');
+            if (tab) tab.classList.add("active");
+            if (window.JAIDE && window.JAIDE.loadPipeline) window.JAIDE.loadPipeline();
+        } else if (viewName === "email") {
+            const emailView = document.getElementById("view-email");
+            if (emailView) emailView.classList.add("view-active");
+            const tab = document.querySelector('[data-view="email"]');
+            if (tab) tab.classList.add("active");
+            if (window.JAIDE && window.JAIDE.showEmailHub) window.JAIDE.showEmailHub();
         }
         currentView = viewName;
+        // Notify dashboard.js when dashboard is activated
+        document.dispatchEvent(new CustomEvent("viewActivated", { detail: viewName }));
     }
 
     // Tab click handlers
@@ -611,6 +627,7 @@
     window.JAIDE.getCurrentJdText = () => currentJdText;
     window.JAIDE.openEmailComposer = openEmailComposer;
     window.JAIDE.openProfile = openProfile;
+    window.JAIDE.showSentEmails = showSentEmails;
     window.JAIDE.addBubble = addBubble;
     window.JAIDE.addLoader = addLoader;
     window.JAIDE.addAILoader = addAILoader;
@@ -747,6 +764,33 @@
         });
     }
 
+    // ---- Source filter ----
+    const attySourceFilterEl = document.getElementById("atty-source-filter");
+    if (attySourceFilterEl) {
+        attySourceFilterEl.addEventListener("sourceFilterChange", (e) => {
+            attySourceFilter = e.detail.source;
+            const filtered = attySourceFilter === "all"
+                ? currentCandidates
+                : currentCandidates.filter(c => (c.source || "fp") === attySourceFilter);
+            renderCandidateTable(filtered);
+        });
+    }
+
+    // Listen for custom record saved/deleted to refresh table
+    window.addEventListener("customRecordSaved", () => {
+        if (hasResults) renderCandidateTable(
+            attySourceFilter === "all" ? currentCandidates : currentCandidates.filter(c => (c.source || "fp") === attySourceFilter)
+        );
+    });
+    window.addEventListener("customRecordDeleted", (e) => {
+        if (e.detail.type === "attorney") {
+            const deletedId = `custom_${e.detail.id}`;
+            currentCandidates = currentCandidates.filter(c => String(c.id) !== deletedId);
+            const filtered = attySourceFilter === "all" ? currentCandidates : currentCandidates.filter(c => (c.source || "fp") === attySourceFilter);
+            renderCandidateTable(filtered);
+        }
+    });
+
     // ---- Candidate table (with checkboxes) ----
     const TIER_ORDER = ["Tier 1+", "Tier 1", "Tier 2", "Tier 3"];
 
@@ -804,7 +848,7 @@
             tr.innerHTML = `
                 <td class="cell-check"><input type="checkbox" class="row-cb" data-idx="${i}" ${selectedCandidates.has(i) ? "checked" : ""}></td>
                 <td class="cell-rank">${i + 1}</td>
-                <td><span class="tier-badge tb-${tierKey}">${esc(tier)}</span>${isBoomerang ? '<span class="boomerang-badge" title="Previously worked at the hiring firm">Boomerang</span>' : ''}</td>
+                <td><span class="tier-badge tb-${tierKey}">${esc(tier)}</span>${isBoomerang ? '<span class="boomerang-badge" title="Previously worked at the hiring firm">Boomerang</span>' : ''}${c.source === 'custom' ? '<span class="source-badge source-badge-custom">Custom</span>' : '<span class="source-badge source-badge-fp">FP</span>'}</td>
                 <td class="cell-name">
                     <div class="name-primary"><a class="name-link" data-idx="${i}">${esc(name)}</a></div>
                     ${priorFirms ? '<div class="name-prior" title="' + esc(priorFirms) + '">Prior: ' + esc(priorFirms) + '</div>' : ''}
@@ -815,7 +859,7 @@
                 <td>${esc(school)}</td>
                 <td class="cell-center">${esc(bar)}</td>
                 <td class="cell-spec" title="${esc(specs)}">${esc(specs)}</td>
-                <td class="cell-actions"><button class="btn-pitch" data-idx="${i}" title="Generate Pitch PDF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></button><button class="btn-find-similar" data-idx="${i}" title="Find Similar Attorneys"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg></button></td>`;
+                <td class="cell-actions"><button class="btn-pitch" data-idx="${i}" title="Generate Pitch PDF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></button><button class="btn-find-similar" data-idx="${i}" title="Find Similar Attorneys"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg></button><button class="btn-add-worklist" data-idx="${i}" title="Add to Worklist"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></button>${c.source === 'custom' ? `<button class="btn-edit-custom" data-idx="${i}" title="Edit"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="btn-delete-custom" data-idx="${i}" title="Delete"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg></button>` : ''}</td>`;
 
             // Wire checkbox
             const cb = tr.querySelector(".row-cb");
@@ -854,6 +898,40 @@
                 pitchBtn.addEventListener("click", (e) => {
                     e.stopPropagation();
                     if (window.JAIDE && window.JAIDE.openPitchModal) window.JAIDE.openPitchModal(sorted[i]);
+                });
+            }
+            const addWorklistBtn = tr.querySelector(".btn-add-worklist");
+            if (addWorklistBtn) {
+                addWorklistBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const cand = sorted[parseInt(addWorklistBtn.dataset.idx)];
+                    if (window.JAIDE && window.JAIDE.openAddToWorklist) window.JAIDE.openAddToWorklist(cand);
+                });
+            }
+            const editCustomBtn = tr.querySelector(".btn-edit-custom");
+            if (editCustomBtn) {
+                editCustomBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const cand = sorted[parseInt(editCustomBtn.dataset.idx)];
+                    const rawId = String(cand.id || "").replace("custom_", "");
+                    fetch(`/api/custom/attorneys/${rawId}`)
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.attorney && window.JAIDE && window.JAIDE.openCustomAttorneyModal) {
+                                window.JAIDE.openCustomAttorneyModal(data.attorney);
+                            }
+                        });
+                });
+            }
+            const deleteCustomBtn = tr.querySelector(".btn-delete-custom");
+            if (deleteCustomBtn) {
+                deleteCustomBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const cand = sorted[parseInt(deleteCustomBtn.dataset.idx)];
+                    const rawId = String(cand.id || "").replace("custom_", "");
+                    if (window.JAIDE && window.JAIDE.deleteCustomRecord) {
+                        window.JAIDE.deleteCustomRecord("attorneys", rawId, cand.name || "this candidate");
+                    }
                 });
             }
             tbody.appendChild(tr);
@@ -934,7 +1012,7 @@
     document.getElementById("fab-compare")?.addEventListener("click", () => {
         const selected = getSelectedCandidateObjects();
         if (selected.length >= 2 && window.JAIDE && window.JAIDE.openCompareModal) {
-            window.JAIDE.openCompareModal(selected);
+            window.JAIDE.openCompareModal(selected, window._compareDefaultJobId || null);
         }
     });
 
@@ -1047,7 +1125,7 @@ td{padding:8px 10px;border-bottom:1px solid #F6F6F6;vertical-align:top;font-size
         const initials = ((c.first_name || name.split(" ")[0] || "").charAt(0) + (c.last_name || name.split(" ").pop() || "").charAt(0)).toUpperCase();
         const yr = c.graduation_year || c.graduationYear || "";
         const firm = c.current_firm || c.firm_name || "";
-        const title = c.title || "";
+        const titleRole = c.title || "";
         const photo = c.photo_url || "";
         const email = c.email || "";
         const phone = c.phone_primary || "";
@@ -1068,6 +1146,7 @@ td{padding:8px 10px;border-bottom:1px solid #F6F6F6;vertical-align:top;font-size
         const practiceAreas = c.practice_areas || "";
         const specs = c.specialties || c.specialty || "";
         const syncDate = c.scraped_on || "";
+        const aid = String(c.id || c.attorney_id || "");
 
         const photoHtml = photo
             ? `<img class="profile-photo" src="${esc(photo)}" alt="${esc(name)}" onerror="this.outerHTML='<div class=\\'profile-avatar\\' style=\\'background:${avatarColor(name)}\\'>${esc(initials)}</div>'">`
@@ -1084,6 +1163,7 @@ td{padding:8px 10px;border-bottom:1px solid #F6F6F6;vertical-align:top;font-size
             return str.split(/[,;]+/).map(s => s.trim()).filter(Boolean).map(s => `<span class="profile-pill">${esc(s)}</span>`).join("");
         }
 
+        // Profile tab: fields + bio
         let fieldsHtml = "";
         if (practiceAreas) fieldsHtml += `<div class="profile-field"><div class="profile-field-label">Practice Areas</div><div class="profile-pills">${pills(practiceAreas)}</div></div>`;
         if (specs) fieldsHtml += `<div class="profile-field"><div class="profile-field-label">Specialties</div><div class="profile-pills">${pills(specs)}</div></div>`;
@@ -1096,50 +1176,142 @@ td{padding:8px 10px;border-bottom:1px solid #F6F6F6;vertical-align:top;font-size
         if (clerkships) fieldsHtml += `<div class="profile-field"><div class="profile-field-label">Clerkships</div><div class="profile-field-value">${esc(clerkships)}</div></div>`;
         if (prior) fieldsHtml += `<div class="profile-field"><div class="profile-field-label">Prior Experience</div><div class="profile-field-value">${esc(prior)}</div></div>`;
 
+        // Bio — full display; expand button if >2000 chars
         let bioHtml = "";
         if (bio) {
-            const bioId = "profile-bio-text";
-            bioHtml = `
-                <div class="profile-bio-label">Biography</div>
-                <div class="profile-bio" id="${bioId}">${esc(bio)}</div>
-                <button class="profile-bio-toggle" id="profile-bio-toggle" style="display:none">more &#9660;</button>`;
+            const BIO_LIMIT = 2000, BIO_SHOW = 1500;
+            if (bio.length > BIO_LIMIT) {
+                bioHtml = `
+                    <div class="profile-section">
+                        <div class="profile-field-label">Biography</div>
+                        <div class="profile-bio-full">${esc(bio.slice(0, BIO_SHOW))}<span id="profile-bio-rest" style="display:none">${esc(bio.slice(BIO_SHOW))}</span></div>
+                        <button class="profile-bio-toggle" id="profile-bio-toggle">Show full bio &#9660;</button>
+                    </div>`;
+            } else {
+                bioHtml = `
+                    <div class="profile-section">
+                        <div class="profile-field-label">Biography</div>
+                        <div class="profile-bio-full">${esc(bio)}</div>
+                    </div>`;
+            }
         }
 
         profileCard.innerHTML = `
             <button class="profile-close" id="profile-close-btn">&times;</button>
             <div class="profile-body">
                 <div class="profile-left">
-                    <div class="profile-header">
-                        ${photoHtml}
-                        <div class="profile-name-block">
-                            <div class="profile-name">${esc(name)}${yr ? ' <span class="year">' + shortYear(yr) + '</span>' : ''}</div>
-                            <div class="profile-firm-row">
-                                ${profileURL ? '<a class="profile-firm-link" href="' + esc(profileURL) + '" target="_blank">' + esc(firm) + '</a>' : '<span class="profile-firm-link">' + esc(firm) + '</span>'}
-                                ${title ? '<span class="profile-title-badge">' + esc(title) + '</span>' : ''}
-                                ${c.is_boomerang === true ? '<span class="boomerang-badge" title="Previously worked at the hiring firm">Boomerang</span>' : ''}
-                            </div>
-                            <button class="btn-add-pipeline-profile" id="btn-profile-add-pipeline">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                                Add to Pipeline
-                            </button>
-                            <button class="btn-find-similar-profile" id="btn-profile-find-similar">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
-                                Find Similar Attorneys
-                            </button>
-                            <button class="btn-pitch btn-pitch-profile" id="btn-profile-pitch">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                                Generate Pitch
-                            </button>
+                    <div class="profile-photo-center">${photoHtml}</div>
+                    <div class="profile-name-center">
+                        <div class="profile-name">${esc(name)}${yr ? ' <span class="year">' + shortYear(yr) + '</span>' : ''}</div>
+                        <div class="profile-firm-row">
+                            ${profileURL ? '<a class="profile-firm-link" href="' + esc(profileURL) + '" target="_blank">' + esc(firm) + '</a>' : (firm ? '<span class="profile-firm-link">' + esc(firm) + '</span>' : '')}
+                            ${titleRole ? '<span class="profile-title-badge">' + esc(titleRole) + '</span>' : ''}
+                            ${c.is_boomerang === true ? '<span class="boomerang-badge" title="Previously worked at the hiring firm">Boomerang</span>' : ''}
                         </div>
                     </div>
+                    <div class="profile-action-buttons">
+                        <button class="btn-add-pipeline-profile" id="btn-profile-add-pipeline">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Add to Pipeline
+                        </button>
+                        <button class="btn-find-similar-profile" id="btn-profile-find-similar">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+                            Find Similar
+                        </button>
+                        <button class="btn-pitch btn-pitch-profile" id="btn-profile-pitch">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            Generate Pitch
+                        </button>
+                        <button class="btn-secondary btn-sm btn-pitch-firm" id="btn-profile-pitch-firm">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+                            Pitch a Firm
+                        </button>
+                        ${email ? `<button class="btn-secondary btn-sm" id="btn-profile-send-email">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></svg>
+                            Send Email
+                        </button>` : ""}
+                        <button class="btn-secondary btn-sm" id="btn-profile-add-worklist">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                            Add to Worklist
+                        </button>
+                        <button class="btn-secondary btn-sm" id="btn-profile-create-task">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4"/></svg>
+                            Create Task
+                        </button>
+                    </div>
                     ${contactHtml ? '<div class="profile-contact">' + contactHtml + '</div>' : ''}
-                    ${bioHtml}
+                    <div class="profile-email-history" id="profile-email-history-compact">
+                        <div class="profile-email-history-header">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></svg>
+                            Recent Emails
+                        </div>
+                        <div class="profile-email-history-body">Loading...</div>
+                    </div>
                 </div>
                 <div class="profile-right">
-                    ${fieldsHtml || '<p class="no-data">No additional details available</p>'}
+                    <div class="profile-tabs-bar">
+                        <button class="profile-tab active" data-tab="profile">Profile</button>
+                        <button class="profile-tab" data-tab="experience">Experience</button>
+                        <button class="profile-tab" data-tab="correspondence">Correspondence</button>
+                        <button class="profile-tab" data-tab="matched-jobs">Matched Jobs</button>
+                    </div>
+                    <div class="profile-tab-panels">
+                        <div class="profile-tab-panel active" data-panel="profile">
+                            ${fieldsHtml || ""}
+                            ${bioHtml}
+                            ${!fieldsHtml && !bioHtml ? '<p class="no-data">No additional details available</p>' : ""}
+                            ${syncDate ? '<div class="profile-sync-date">Last synced: ' + esc(syncDate) + '</div>' : ''}
+                        </div>
+                        <div class="profile-tab-panel" data-panel="experience">
+                            <div class="profile-experience-placeholder">
+                                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#B4B4B4" stroke-width="1.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
+                                <p>Employment history not yet available.</p>
+                                <p class="profile-exp-sub">Connect to LinkedIn or upload a resume to populate work history.</p>
+                            </div>
+                        </div>
+                        <div class="profile-tab-panel" data-panel="correspondence">
+                            <div class="tab-loading">Loading correspondence…</div>
+                        </div>
+                        <div class="profile-tab-panel" data-panel="matched-jobs">
+                            <div class="tab-loading">Loading matched jobs…</div>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            ${syncDate ? '<div class="profile-footer">Last synced: ' + esc(syncDate) + '</div>' : ''}`;
+            </div>`;
+
+        // Tab switching with lazy load
+        profileCard.querySelectorAll(".profile-tab").forEach(tab => {
+            tab.onclick = function () {
+                profileCard.querySelectorAll(".profile-tab").forEach(t => t.classList.remove("active"));
+                tab.classList.add("active");
+                const panelName = tab.dataset.tab;
+                profileCard.querySelectorAll(".profile-tab-panel").forEach(p => p.classList.remove("active"));
+                profileCard.querySelector(`[data-panel="${panelName}"]`).classList.add("active");
+                if (panelName === "correspondence" && !tab._loaded) {
+                    tab._loaded = true;
+                    _loadCorrespondenceTab(aid, email);
+                } else if (panelName === "matched-jobs" && !tab._loaded) {
+                    tab._loaded = true;
+                    _loadMatchedJobsTab(aid);
+                }
+            };
+        });
+
+        // Bio expand
+        const bioToggle = profileCard.querySelector("#profile-bio-toggle");
+        if (bioToggle) {
+            bioToggle.addEventListener("click", () => {
+                const rest = profileCard.querySelector("#profile-bio-rest");
+                if (rest) {
+                    const visible = rest.style.display !== "none";
+                    rest.style.display = visible ? "none" : "inline";
+                    bioToggle.innerHTML = visible ? "Show full bio &#9660;" : "Show less &#9650;";
+                }
+            });
+        }
+
+        // Compact email history
+        _loadCompactEmailHistory(aid, email);
 
         $("#profile-close-btn").addEventListener("click", closeProfile);
 
@@ -1160,21 +1332,170 @@ td{padding:8px 10px;border-bottom:1px solid #F6F6F6;vertical-align:top;font-size
             if (window.JAIDE && window.JAIDE.openPitchModal) window.JAIDE.openPitchModal(c);
         });
 
-        if (bio) {
-            requestAnimationFrame(() => {
-                const bioEl = $("#profile-bio-text");
-                const toggleEl = $("#profile-bio-toggle");
-                if (bioEl && bioEl.scrollHeight > bioEl.clientHeight + 2) {
-                    toggleEl.style.display = "inline-block";
-                    toggleEl.addEventListener("click", () => {
-                        const expanded = bioEl.classList.toggle("expanded");
-                        toggleEl.innerHTML = expanded ? "less &#9650;" : "more &#9660;";
-                    });
+        $("#btn-profile-pitch-firm").addEventListener("click", () => {
+            closeProfile();
+            if (window.JAIDE && window.JAIDE.openFirmPitchModal) {
+                window.JAIDE.openFirmPitchModal({
+                    candidate: {
+                        id: c.id || c.attorney_id || "",
+                        name: name,
+                        practice_areas: c.practice_areas || c.practiceArea || "",
+                    },
+                });
+            }
+        });
+
+        const sendEmailBtn = profileCard.querySelector("#btn-profile-send-email");
+        if (sendEmailBtn) {
+            sendEmailBtn.addEventListener("click", () => {
+                closeProfile();
+                // Open compose modal pre-populated with this attorney
+                const composeOverlay = document.getElementById("compose-overlay");
+                if (composeOverlay) {
+                    composeOverlay.classList.add("open");
+                    const toField = document.getElementById("compose-to");
+                    if (toField) toField.value = email;
+                } else {
+                    // Fallback: open email client
+                    window.location.href = `mailto:${encodeURIComponent(email)}`;
+                }
+            });
+        }
+
+        const addWorklistBtn = profileCard.querySelector("#btn-profile-add-worklist");
+        if (addWorklistBtn) {
+            addWorklistBtn.addEventListener("click", () => {
+                closeProfile();
+                if (window.JAIDE && window.JAIDE.openAddToWorklist) {
+                    window.JAIDE.openAddToWorklist({ id: aid, name, email, current_firm: firm });
+                }
+            });
+        }
+
+        const createTaskBtn = profileCard.querySelector("#btn-profile-create-task");
+        if (createTaskBtn) {
+            createTaskBtn.addEventListener("click", () => {
+                closeProfile();
+                if (window.JAIDE && window.JAIDE.openTaskModal) {
+                    window.JAIDE.openTaskModal({ prefillTitle: `Follow up with ${name}` });
                 }
             });
         }
 
         profileOverlay.classList.add("open");
+    }
+
+    function _loadCompactEmailHistory(aid, email) {
+        const container = document.getElementById("profile-email-history-compact");
+        if (!container) return;
+        const bodyEl = container.querySelector(".profile-email-history-body");
+        if (!bodyEl) return;
+        if (!aid && !email) {
+            bodyEl.innerHTML = '<span class="profile-email-none">No emails sent yet</span>';
+            return;
+        }
+        const url = `/api/email/history/${encodeURIComponent(String(aid))}` +
+            (email ? `?email=${encodeURIComponent(email)}` : "");
+        fetch(url)
+            .then(r => r.json())
+            .then(data => {
+                const entries = (data.entries || []).slice(0, 5);
+                if (!entries.length) {
+                    bodyEl.innerHTML = '<span class="profile-email-none">No emails sent yet</span>';
+                    return;
+                }
+                bodyEl.innerHTML = entries.map(e => {
+                    const d = (e.sent_at || "").slice(0, 10);
+                    const opened = e.opened_count > 0;
+                    const replied = !!e.replied_at;
+                    const statusDot = e.status === "sent"
+                        ? (opened ? '<span class="peh-dot peh-dot-opened" title="Opened">●</span>'
+                                  : '<span class="peh-dot peh-dot-sent" title="Sent">●</span>')
+                        : '<span class="peh-dot peh-dot-failed" title="Failed">●</span>';
+                    return `<div class="profile-email-row">
+                        ${statusDot}
+                        <span class="peh-date">${esc(d)}</span>
+                        <span class="peh-subject">${esc(e.subject || "(no subject)")}</span>
+                        ${opened ? '<span class="peh-tag peh-tag-opened">Opened</span>' : ''}
+                        ${replied ? '<span class="peh-tag peh-tag-replied">Replied</span>' : ''}
+                    </div>`;
+                }).join("");
+            })
+            .catch(() => {
+                if (bodyEl) bodyEl.innerHTML = '<span class="profile-email-none">—</span>';
+            });
+    }
+
+    function _loadCorrespondenceTab(aid, email) {
+        const panel = profileCard.querySelector('[data-panel="correspondence"]');
+        if (!panel) return;
+        if (!aid && !email) {
+            panel.innerHTML = '<p class="no-data">No emails logged for this attorney.</p>';
+            return;
+        }
+        const url = `/api/email/history/${encodeURIComponent(String(aid))}` +
+            (email ? `?email=${encodeURIComponent(email)}` : "");
+        fetch(url)
+            .then(r => r.json())
+            .then(data => {
+                const entries = data.entries || [];
+                if (!entries.length) {
+                    panel.innerHTML = `
+                        <p class="no-data">No outbound emails logged for this attorney yet.</p>
+                        <p class="nylas-tracking-note" style="margin-top:8px">Inbound email tracking requires Nylas integration.</p>`;
+                    return;
+                }
+                const rows = entries.map(e => {
+                    const d = (e.sent_at || "").slice(0, 10);
+                    const statusBadge = e.status === "sent"
+                        ? '<span class="hub-status-badge sent">Sent</span>'
+                        : `<span class="hub-status-badge failed">${esc(e.status)}</span>`;
+                    return `<div class="corr-row">
+                        <div class="corr-row-top">
+                            <span class="corr-subject">${esc(e.subject || "(no subject)")}</span>
+                            ${statusBadge}
+                        </div>
+                        <div class="corr-row-meta">
+                            <span class="corr-date">${esc(d)}</span>
+                            ${e.job_title ? '<span class="corr-job">' + esc(e.job_title) + '</span>' : ''}
+                            ${e.opened_count > 0 ? '<span class="peh-tag peh-tag-opened">Opened</span>' : ''}
+                            ${e.replied_at ? '<span class="peh-tag peh-tag-replied">Replied</span>' : ''}
+                        </div>
+                    </div>`;
+                }).join("");
+                panel.innerHTML = `
+                    <div class="corr-list">${rows}</div>
+                    <p class="nylas-tracking-note" style="margin-top:12px">Inbound email tracking (opens, clicks, replies) requires Nylas integration.</p>`;
+            })
+            .catch(() => {
+                panel.innerHTML = '<p class="no-data">Failed to load correspondence.</p>';
+            });
+    }
+
+    function _loadMatchedJobsTab(aid) {
+        const panel = profileCard.querySelector('[data-panel="matched-jobs"]');
+        if (!panel) return;
+        fetch(`/api/attorneys/${encodeURIComponent(String(aid))}/full-profile`)
+            .then(r => r.json())
+            .then(data => {
+                const pipeline = data.pipeline || [];
+                if (!pipeline.length) {
+                    panel.innerHTML = '<p class="no-data">This attorney is not currently on any job pipelines.</p>';
+                    return;
+                }
+                const rows = pipeline.map(p => `
+                    <div class="matched-job-row">
+                        <div class="matched-job-title">${esc(p.job_title || "—")}</div>
+                        <div class="matched-job-meta">
+                            ${p.employer_name ? '<span class="matched-job-firm">' + esc(p.employer_name) + '</span>' : ''}
+                            <span class="pipeline-stage-chip">${esc(p.stage || "—")}</span>
+                        </div>
+                    </div>`).join("");
+                panel.innerHTML = `<div class="matched-jobs-list">${rows}</div>`;
+            })
+            .catch(() => {
+                panel.innerHTML = '<p class="no-data">Failed to load pipeline data.</p>';
+            });
     }
 
     // ================================================================
@@ -1697,57 +2018,32 @@ td{padding:8px 10px;border-bottom:1px solid #F6F6F6;vertical-align:top;font-size
             showSentEmails();
         });
     }
-    $("#btn-sent-back").addEventListener("click", () => {
-        $("#sent-emails-view").style.display = "none";
-        if (hasResults) {
-            resultsContent.style.display = "block";
-        } else {
-            resultsPlaceholder.style.display = "flex";
-        }
-    });
+    // "Back" button in Email Hub — delegate to hub module if available
+    const _sentBackBtn = $("#btn-sent-back");
+    if (_sentBackBtn) {
+        _sentBackBtn.addEventListener("click", () => {
+            const view = $("#sent-emails-view");
+            if (view) view.style.display = "none";
+            if (hasResults) {
+                resultsContent.style.display = "block";
+            } else {
+                resultsPlaceholder.style.display = "flex";
+            }
+        });
+    }
 
     function showSentEmails() {
-        resultsPlaceholder.style.display = "none";
-        resultsContent.style.display = "none";
-        const view = $("#sent-emails-view");
-        view.style.display = "block";
-        const tableEl = $("#sent-emails-table");
-        tableEl.innerHTML = '<p class="streaming-note">Loading...</p>';
-
-        fetch("/api/email/log")
-            .then(r => r.json())
-            .then(data => {
-                const entries = data.entries || [];
-                if (!entries.length) {
-                    tableEl.innerHTML = '<p class="no-data" style="padding:20px">No emails sent yet.</p>';
-                    return;
-                }
-                let rows = "";
-                entries.forEach(e => {
-                    const statusClass = e.status === "sent" ? "status-sent" : "status-failed";
-                    rows += `<tr>
-                        <td>${esc(e.timestamp || "")}</td>
-                        <td>${esc(e.candidate_name || "")}</td>
-                        <td>${esc(e.to || "")}</td>
-                        <td>${esc(e.subject || "")}</td>
-                        <td><span class="email-status ${statusClass}">${esc(e.status || "")}</span></td>
-                        <td class="cell-error">${esc(e.error || "")}</td>
-                    </tr>`;
-                });
-                tableEl.innerHTML = `
-                    <div class="table-wrapper">
-                        <table class="candidate-table">
-                            <thead><tr>
-                                <th>Time</th><th>Candidate</th><th>To</th><th>Subject</th><th>Status</th><th>Error</th>
-                            </tr></thead>
-                            <tbody>${rows}</tbody>
-                        </table>
-                    </div>`;
-            })
-            .catch(() => {
-                tableEl.innerHTML = '<p class="no-data" style="padding:20px">Failed to load email log.</p>';
-            });
+        if (window.JAIDE && window.JAIDE.showEmailHub) {
+            window.JAIDE.showEmailHub();
+        }
     }
+
+    // Wire Email Settings button in the Email Hub header
+    document.addEventListener("click", function (e) {
+        if (e.target && e.target.id === "btn-email-settings") {
+            openSettings();
+        }
+    });
 
     // ================================================================
     // Find Similar Attorneys

@@ -22,7 +22,9 @@
     let _aiResults = null;
 
     // ── Init ─────────────────────────────────────────────────────────
-    document.addEventListener("DOMContentLoaded", init);
+    // Scripts are at end of <body>, so DOMContentLoaded has already fired.
+    // Call init() directly instead.
+    init();
 
     function init() {
         // Context modal
@@ -56,7 +58,7 @@
     }
 
     // ── Open context modal ───────────────────────────────────────────
-    function openCompareModal(candidates) {
+    function openCompareModal(candidates, defaultJobId) {
         _candidates = candidates;
         _aiResults = null;
 
@@ -75,7 +77,7 @@
         const sel = $id("compare-job-select");
         if (sel) {
             sel.innerHTML = '<option value="">No specific job</option>';
-            fetch("/api/jobs?status=open")
+            fetch("/api/jobs?status=Active")
                 .then(r => r.json())
                 .then(data => {
                     (data.jobs || []).forEach(j => {
@@ -84,6 +86,8 @@
                         opt.textContent = `${j.title}${j.employer_name ? " — " + j.employer_name : ""}`;
                         sel.appendChild(opt);
                     });
+                    // Pre-select the job that surfaced these candidates
+                    if (defaultJobId) sel.value = String(defaultJobId);
                 })
                 .catch(() => {});
         }

@@ -2,9 +2,11 @@ import os
 import re
 import json
 import csv
+import uuid
 import traceback
 import smtplib
 import time
+import threading
 from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -180,12 +182,66 @@ Rules:
 # Data loading – runs once on startup
 # ---------------------------------------------------------------------------
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+_ATTORNEY_CSV_PATH = os.path.join(DATA_DIR, "attorneys.csv")
+
+# Columns to load from the attorneys CSV. Heavy unused columns (attorneyBio,
+# matters, fullbio_with_tags, matters_with_tags, prior_experience_with_tags,
+# raw_memberships, raw_notable_matters) are excluded and loaded on-demand.
+ATTORNEY_COLUMNS = {
+    'id', 'first_name', 'last_name', 'firm_name', 'firm_type', 'location',
+    'title', 'summary', 'practice_areas', 'specialty', 'added_keywords',
+    'nlp_specialties', 'barAdmissions', 'lawSchool', 'graduationYear',
+    'undergraduate', 'llm_school', 'llm_specialty', 'clerkships',
+    'prior_experience', 'gender', 'diverse', 'top_200', 'vault_50',
+    'vault_10', 'photo_url', 'profileURL', 'linkedinURL', 'languages',
+    'raw_acknowledgements', 'email', 'phone_primary', 'scraped_on',
+    'location_secondary',
+}
+
+# Bio cache: {str(attorney_id): bio+matters string}
+# Populated in background thread at startup — instant lookups once ready.
+_attorney_bio_cache: dict = {}
+_attorney_bio_cache_ready = False
+
+
+def _build_attorney_bio_cache():
+    """Load bio + matters for all attorneys into an in-memory dict (background thread)."""
+    global _attorney_bio_cache, _attorney_bio_cache_ready
+    if not os.path.exists(_ATTORNEY_CSV_PATH):
+        return
+    try:
+        df = pd.read_csv(_ATTORNEY_CSV_PATH, usecols=['id', 'attorneyBio', 'matters'], dtype=str)
+        cache = {}
+        for _, row in df.iterrows():
+            aid = str(row.get('id', '') or '').strip()
+            bio = str(row.get('attorneyBio', '') or '').strip()
+            matters = str(row.get('matters', '') or '').strip()
+            cache[aid] = (bio + (" " + matters if matters else "")).strip()
+        _attorney_bio_cache = cache
+        _attorney_bio_cache_ready = True
+        print(f"Attorney bio cache ready: {len(_attorney_bio_cache)} entries")
+    except Exception as e:
+        print(f"Warning: could not build attorney bio cache: {e}")
+
+
+def get_attorney_full_bio(attorney_id) -> str:
+    """Return bio + matters for an attorney. Uses in-memory cache (built at startup)."""
+    return _attorney_bio_cache.get(str(attorney_id), "")
+
 
 def load_attorneys():
-    path = os.path.join(DATA_DIR, "attorneys.csv")
+    path = _ATTORNEY_CSV_PATH
     if not os.path.exists(path):
         return pd.DataFrame()
-    df = pd.read_csv(path, dtype=str).fillna("")
+    print("Loading attorneys CSV (filtered columns)...")
+    df = pd.read_csv(
+        path,
+        usecols=lambda c: c in ATTORNEY_COLUMNS,
+        dtype=str,
+        low_memory=False,
+    ).fillna("")
+    mem_mb = df.memory_usage(deep=True).sum() / 1024 / 1024
+    print(f"Attorneys DataFrame loaded: {len(df):,} rows, {len(df.columns)} columns, {mem_mb:.0f} MB")
     return df
 
 def load_hiring_history():
@@ -196,6 +252,7 @@ def load_hiring_history():
     return df
 
 ATTORNEYS_DF = load_attorneys()
+threading.Thread(target=_build_attorney_bio_cache, daemon=True).start()
 HIRING_DF = load_hiring_history()
 
 def load_jobs():
@@ -1381,6 +1438,205 @@ def analyze_hiring_patterns(firm_name, cities=None, state="", exact_firm=False):
         "feeder_firms_chart": feeder_firms_data,
     }
 
+
+# ---------------------------------------------------------------------------
+# Firm Pitch — data computation
+# ---------------------------------------------------------------------------
+
+_FP_PRACTICE_COLS = [
+    "Antitrust", "Banking", "Bankruptcy", "Corporate", "Data Privacy",
+    "ERISA", "Energy", "Entertainment", "Environmental", "FDA",
+    "Government", "Health Care", "Insurance", "Intellectual Property",
+    "International Trade", "Labor & Employment", "Litigation", "Media",
+    "Real Estate", "Tax", "Telecommunications", "Transportation", "Trusts & Estates",
+]
+
+
+def _compute_firm_pitch_data(firm_name, office=None, practice_group=None, candidate_id=None):
+    """Compute all data needed for a firm pitch PDF.
+
+    Returns a dict with hires_by_year, departures_by_year, net_growth,
+    feeder_firms, feeder_schools, dest_breakdown, inhouse_destinations,
+    team_by_title, firm_meta, candidate (optional), and more.
+    """
+    result = {}
+
+    # 1. Resolve firm name via fuzzy match
+    matched_firm, score = fuzzy_match_firm(firm_name)
+    result["matched_firm"] = matched_firm or firm_name
+    result["match_score"] = score
+
+    # 2. Look up FIRMS_DF row
+    firm_row = {}
+    if FIRMS_DF is not None and not FIRMS_DF.empty:
+        mask = FIRMS_DF["Name"].fillna("").str.lower() == result["matched_firm"].lower()
+        if not mask.any():
+            mask = FIRMS_DF["Name"].fillna("").str.lower().str.contains(
+                result["matched_firm"].lower(), regex=False)
+        matches = FIRMS_DF[mask]
+        if not matches.empty:
+            firm_row = matches.iloc[0].to_dict()
+
+    total_atty = str(firm_row.get("Total Attorneys", "") or "").replace(".0", "")
+    ppp_raw = firm_row.get("PPP", "")
+    ppp_str = ""
+    if ppp_raw and str(ppp_raw) not in ("", "nan", "None"):
+        try:
+            ppp_val = float(str(ppp_raw).replace(",", ""))
+            ppp_str = f"${ppp_val/1_000_000:.1f}M" if ppp_val >= 1_000_000 else f"${int(ppp_val):,}"
+        except Exception:
+            ppp_str = str(ppp_raw)
+
+    result["firm_meta"] = {
+        "total_attorneys": total_atty,
+        "ppp": ppp_str,
+        "ppp_raw": str(ppp_raw),
+        "partners": str(firm_row.get("Partners", "") or "").replace(".0", ""),
+        "counsel": str(firm_row.get("Counsel", "") or "").replace(".0", ""),
+        "associates": str(firm_row.get("Associates", "") or "").replace(".0", ""),
+        "fp_id": str(firm_row.get("FP ID", "") or ""),
+    }
+
+    # Practice areas from boolean columns
+    firm_practices = [col for col in _FP_PRACTICE_COLS
+                      if str(firm_row.get(col, "")).upper() in ("TRUE", "1", "YES")]
+    result["firm_practices"] = firm_practices
+
+    # Offices
+    offices_raw = str(firm_row.get("Firm Office Locations", "") or "")
+    result["offices"] = [o.strip() for o in offices_raw.split(";") if o.strip()]
+
+    current_year = datetime.now().year
+    years = list(range(current_year - 5, current_year + 1))
+
+    # Empty-data defaults
+    empty_year_dict = {str(y): 0 for y in years}
+
+    if HIRING_DF is None or HIRING_DF.empty:
+        result.update({
+            "hires_by_year": empty_year_dict, "feeder_firms": [], "feeder_schools": [],
+            "title_dist": {}, "departures_by_year": empty_year_dict, "dest_breakdown": {},
+            "inhouse_destinations": [], "inhouse_pct": 0, "lateral_out_pct": 0,
+            "govt_pct": 0, "lateral_out_destinations": [], "govt_destinations": [],
+            "net_growth": empty_year_dict, "team_size": 0, "team_by_title": {},
+            "team_schools": [], "candidate": None,
+        })
+        return result
+
+    # 3. Hires INTO firm
+    hires_df = HIRING_DF[HIRING_DF["Firm"] == result["matched_firm"]].copy()
+    if office:
+        hires_df = hires_df[hires_df["City"].fillna("").str.lower() == office.lower()]
+    if practice_group:
+        hires_df = hires_df[
+            hires_df["Practice Areas New"].fillna("").str.lower().str.contains(
+                practice_group.lower(), regex=False)]
+
+    hires_df["_year"] = pd.to_datetime(hires_df["Move Date"], errors="coerce").dt.year
+    hby_s = hires_df["_year"].value_counts()
+    result["hires_by_year"] = {str(y): int(hby_s.get(y, 0)) for y in years}
+
+    # Feeder firms (law firm laterals)
+    law_lat = hires_df[
+        hires_df["Previous Entity Type"].fillna("").str.lower() == "law firm"]
+    ff_s = law_lat["Moved From"].value_counts()
+    result["feeder_firms"] = [{"name": n, "count": int(c)} for n, c in ff_s.head(10).items()]
+
+    # Feeder schools
+    fs_s = hires_df["Law School"].dropna().value_counts()
+    result["feeder_schools"] = [{"name": n, "count": int(c)} for n, c in fs_s.head(10).items()]
+
+    # Title distribution
+    td_s = hires_df["Title"].value_counts()
+    result["title_dist"] = {t: int(c) for t, c in td_s.head(8).items()}
+
+    # 4. Departures FROM firm
+    dept_df = HIRING_DF[HIRING_DF["Moved From"] == result["matched_firm"]].copy()
+    if practice_group:
+        dept_df = dept_df[
+            dept_df["Practice Areas Old"].fillna("").str.lower().str.contains(
+                practice_group.lower(), regex=False)]
+
+    dept_df["_year"] = pd.to_datetime(dept_df["Move Date"], errors="coerce").dt.year
+    dby_s = dept_df["_year"].value_counts()
+    result["departures_by_year"] = {str(y): int(dby_s.get(y, 0)) for y in years}
+
+    dest_s = dept_df["Entity Type"].value_counts()
+    result["dest_breakdown"] = {t: int(c) for t, c in dest_s.items()}
+
+    total_dept = max(len(dept_df), 1)
+
+    inhouse_mask = dept_df["Entity Type"].fillna("").str.lower().str.contains(
+        "company|corporation|in-house|corporate", na=False)
+    inhouse_df = dept_df[inhouse_mask]
+    result["inhouse_pct"] = round(len(inhouse_df) / total_dept * 100, 1)
+    ih_s = inhouse_df["Firm"].value_counts()
+    result["inhouse_destinations"] = [{"name": n, "count": int(c)} for n, c in ih_s.head(15).items()]
+
+    lat_out_mask = dept_df["Entity Type"].fillna("").str.lower() == "law firm"
+    lat_out_df = dept_df[lat_out_mask]
+    result["lateral_out_pct"] = round(len(lat_out_df) / total_dept * 100, 1)
+    lo_s = lat_out_df["Firm"].value_counts()
+    result["lateral_out_destinations"] = [{"name": n, "count": int(c)} for n, c in lo_s.head(10).items()]
+
+    govt_mask = dept_df["Entity Type"].fillna("").str.lower().str.contains(
+        "government|agency|federal|state|city|public", na=False)
+    govt_df = dept_df[govt_mask]
+    result["govt_pct"] = round(len(govt_df) / total_dept * 100, 1)
+    gv_s = govt_df["Firm"].value_counts()
+    result["govt_destinations"] = [{"name": n, "count": int(c)} for n, c in gv_s.head(8).items()]
+
+    # 5. Net growth
+    result["net_growth"] = {
+        str(y): result["hires_by_year"].get(str(y), 0) - result["departures_by_year"].get(str(y), 0)
+        for y in years
+    }
+
+    # 6. Current team from ATTORNEYS_DF
+    result["team_size"] = 0
+    result["team_by_title"] = {}
+    result["team_schools"] = []
+    if ATTORNEYS_DF is not None and not ATTORNEYS_DF.empty:
+        team_df = ATTORNEYS_DF[
+            ATTORNEYS_DF["firm_name"].fillna("").str.lower() == result["matched_firm"].lower()
+        ].copy()
+        if office and "location" in team_df.columns:
+            team_df = team_df[
+                team_df["location"].fillna("").str.lower().str.contains(office.lower(), regex=False)]
+        if practice_group and "practice_areas" in team_df.columns:
+            team_df = team_df[
+                team_df["practice_areas"].fillna("").str.lower().str.contains(
+                    practice_group.lower(), regex=False)]
+        result["team_size"] = len(team_df)
+        if "title" in team_df.columns:
+            t2_s = team_df["title"].value_counts()
+            result["team_by_title"] = {t: int(c) for t, c in t2_s.head(8).items()}
+        school_col = "lawSchool" if "lawSchool" in team_df.columns else "law_school"
+        if school_col in team_df.columns:
+            sc2_s = team_df[school_col].dropna().value_counts()
+            result["team_schools"] = [{"name": n, "count": int(c)} for n, c in sc2_s.head(10).items()]
+
+    # 7. Candidate fit (optional)
+    result["candidate"] = None
+    if candidate_id is not None and ATTORNEYS_DF is not None and not ATTORNEYS_DF.empty:
+        cid_str = str(candidate_id)
+        cid_mask = ATTORNEYS_DF["id"].astype(str) == cid_str
+        if cid_mask.any():
+            cand_row = ATTORNEYS_DF[cid_mask].iloc[0].to_dict()
+            cand_data = _serialize_candidate(cand_row)
+            cand_school = (cand_data.get("law_school") or "").lower().strip()
+            cand_firm_str = (cand_data.get("current_firm") or "").lower().strip()
+            school_rank = next(
+                (i + 1 for i, s in enumerate(result["feeder_schools"])
+                 if s["name"].lower().strip() == cand_school), None)
+            firm_rank = next(
+                (i + 1 for i, f in enumerate(result["feeder_firms"])
+                 if f["name"].lower().strip() == cand_firm_str), None)
+            result["candidate"] = {**cand_data, "school_rank": school_rank, "firm_rank": firm_rank}
+
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Claude API integration
 # ---------------------------------------------------------------------------
@@ -1408,6 +1664,8 @@ def build_candidate_block(row):
     }
     lines = [f"  {k}: {v}" for k, v in fields.items() if v and str(v).strip()]
     bio = str(row.get("attorneyBio", "")).strip()
+    if not bio:
+        bio = get_attorney_full_bio(row.get("id", ""))
     if bio:
         if len(bio) > BIO_MAX_CHARS:
             bio = bio[:BIO_MAX_CHARS] + "..."
@@ -1605,8 +1863,25 @@ def api_logout():
 
 @app.route("/")
 def index():
-    resp = render_template("index.html")
+    import json as _json
+    # Pre-render dashboard data server-side so it displays on page load
+    # without depending on JavaScript fetches succeeding.
+    pipeline_stats = {}
+    pipeline_rows = []
+    if session.get("user_id"):
+        try:
+            pipeline_stats = ats_db.get_pipeline_stats()
+            pipeline_rows = ats_db.get_pipeline_all()
+        except Exception:
+            pass
     from flask import make_response
+    resp = render_template(
+        "index.html",
+        pipeline_stats=pipeline_stats,
+        pipeline_rows=pipeline_rows,
+        pipeline_rows_json=_json.dumps(pipeline_rows),
+        pipeline_stats_json=_json.dumps(pipeline_stats),
+    )
     r = make_response(resp)
     r.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     r.headers["Pragma"] = "no-cache"
@@ -2025,6 +2300,175 @@ def _generate_career_trajectory_chart(firm_name):
     return buf
 
 
+# ---------------------------------------------------------------------------
+# Firm Pitch — chart generators
+# ---------------------------------------------------------------------------
+
+def _gen_fp_hiring_trend_chart(hires_by_year, firm_name):
+    """Vertical bar: lateral hiring activity last 6 years. Returns BytesIO or None."""
+    if not hires_by_year:
+        return None
+    years = sorted(hires_by_year.keys())
+    counts = [hires_by_year[y] for y in years]
+    if sum(counts) == 0:
+        return None
+
+    fig, ax = plt.subplots(figsize=(4, 2.5))
+    fig.patch.set_facecolor("white")
+    x = list(range(len(years)))
+    bars = ax.bar(x, counts, color="#0059FF", width=0.6, edgecolor="none")
+    for bar, val in zip(bars, counts):
+        if val > 0:
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.15,
+                    str(val), ha="center", va="bottom", fontsize=7, color="#151515")
+    ax.set_xticks(x)
+    ax.set_xticklabels([str(y)[-2:] for y in years], fontsize=7, color="#696969")
+    ax.set_title(f"Lateral Hiring — {firm_name[:30]}", fontsize=9,
+                 fontweight="bold", color="#151515", pad=8)
+    ax.tick_params(axis="y", labelsize=7, colors="#696969")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color("#e2e8f0")
+    ax.spines["bottom"].set_color("#e2e8f0")
+    plt.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    buf.seek(0)
+    return buf
+
+
+def _gen_fp_net_growth_chart(net_growth, firm_name):
+    """Vertical bar: net attorney growth. Positive=green, negative=red. Returns BytesIO or None."""
+    if not net_growth:
+        return None
+    years = sorted(net_growth.keys())
+    counts = [net_growth[y] for y in years]
+    if all(c == 0 for c in counts):
+        return None
+
+    colors = ["#22c55e" if c >= 0 else "#ef4444" for c in counts]
+    fig, ax = plt.subplots(figsize=(4, 2.5))
+    fig.patch.set_facecolor("white")
+    x = list(range(len(years)))
+    ax.bar(x, counts, color=colors, width=0.6, edgecolor="none")
+    ax.axhline(0, color="#e2e8f0", linewidth=0.8)
+    ax.set_xticks(x)
+    ax.set_xticklabels([str(y)[-2:] for y in years], fontsize=7, color="#696969")
+    ax.set_title(f"Net Growth — {firm_name[:30]}", fontsize=9,
+                 fontweight="bold", color="#151515", pad=8)
+    ax.tick_params(axis="y", labelsize=7, colors="#696969")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color("#e2e8f0")
+    ax.spines["bottom"].set_color("#e2e8f0")
+    plt.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    buf.seek(0)
+    return buf
+
+
+def _gen_fp_exit_breakdown_chart(dest_breakdown, firm_name):
+    """Horizontal bar: exit destination types colored by category. Returns BytesIO or None."""
+    if not dest_breakdown:
+        return None
+    items = sorted(dest_breakdown.items(), key=lambda x: x[1], reverse=True)[:10]
+    if not items:
+        return None
+    names = [i[0] for i in items]
+    counts = [i[1] for i in items]
+    colors = []
+    for n in names:
+        nl = n.lower()
+        if "law" in nl:
+            colors.append("#0059FF")
+        elif any(k in nl for k in ("company", "in-house", "corporation", "corporate")):
+            colors.append("#22c55e")
+        elif any(k in nl for k in ("government", "agency", "federal", "public")):
+            colors.append("#F59E0B")
+        else:
+            colors.append("#B4B4B4")
+
+    fig, ax = plt.subplots(figsize=(3.5, 2.5))
+    fig.patch.set_facecolor("white")
+    y_pos = list(range(len(names) - 1, -1, -1))
+    ax.barh(y_pos, counts, color=colors, height=0.6, edgecolor="none")
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(names, fontsize=7, color="#313131")
+    ax.set_title(f"Career Paths After {firm_name[:25]}", fontsize=9,
+                 fontweight="bold", color="#151515", pad=8)
+    ax.tick_params(axis="x", labelsize=7, colors="#696969")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color("#e2e8f0")
+    ax.spines["bottom"].set_color("#e2e8f0")
+    plt.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    buf.seek(0)
+    return buf
+
+
+def _gen_fp_inhouse_destinations_chart(inhouse_destinations, firm_name):
+    """Horizontal bar: top in-house destinations. Returns None if <5 entries."""
+    if not inhouse_destinations or len(inhouse_destinations) < 5:
+        return None
+    top = inhouse_destinations[:12]
+    names = [i["name"] for i in top]
+    counts = [i["count"] for i in top]
+
+    fig, ax = plt.subplots(figsize=(4, 3))
+    fig.patch.set_facecolor("white")
+    y_pos = list(range(len(names) - 1, -1, -1))
+    ax.barh(y_pos, counts, color="#0059FF", height=0.6, edgecolor="none", alpha=0.85)
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(names, fontsize=7, color="#313131")
+    ax.set_title(f"Top In-House Destinations from {firm_name[:22]}", fontsize=9,
+                 fontweight="bold", color="#151515", pad=8)
+    ax.tick_params(axis="x", labelsize=7, colors="#696969")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color("#e2e8f0")
+    ax.spines["bottom"].set_color("#e2e8f0")
+    plt.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    buf.seek(0)
+    return buf
+
+
+def _gen_fp_team_seniority_chart(team_by_title, label):
+    """Horizontal bar: team seniority breakdown. Returns BytesIO or None."""
+    if not team_by_title:
+        return None
+    items = list(team_by_title.items())[:8]
+    names = [i[0] for i in items]
+    counts = [i[1] for i in items]
+
+    fig, ax = plt.subplots(figsize=(3.5, 2.5))
+    fig.patch.set_facecolor("white")
+    y_pos = list(range(len(names) - 1, -1, -1))
+    ax.barh(y_pos, counts, color="#0059FF", height=0.6, edgecolor="none", alpha=0.8)
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(names, fontsize=7, color="#313131")
+    ax.set_title(label, fontsize=9, fontweight="bold", color="#151515", pad=8)
+    ax.tick_params(axis="x", labelsize=7, colors="#696969")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color("#e2e8f0")
+    ax.spines["bottom"].set_color("#e2e8f0")
+    plt.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    buf.seek(0)
+    return buf
+
+
 def _assemble_pitch_pdf(narratives, scores, chart_buffers, attorney_data, job_data,
                         firm_data, dna, sections, anonymize, recruiter_info):
     """Assemble a polished PDF pitch document. Returns BytesIO."""
@@ -2240,6 +2684,380 @@ def _assemble_pitch_pdf(narratives, scores, chart_buffers, attorney_data, job_da
 
 
 # ---------------------------------------------------------------------------
+# Firm Pitch — Claude narrative generation
+# ---------------------------------------------------------------------------
+
+FIRM_PITCH_SYSTEM_PROMPT = """\
+You are JAIDE, an expert legal recruiting strategist. You write polished, data-driven firm pitch \
+documents that recruiters use to present a law firm to a candidate.
+
+You will receive structured data about a law firm — hiring trends, exit patterns, team composition, \
+feeder schools and firms, and optionally a candidate profile.
+
+Return ONLY a valid JSON object with these exact keys:
+{
+  "headline": "A compelling 1-line headline pitching the firm (max 80 chars)",
+  "executive_pitch": "2-3 paragraphs: why this firm is a compelling move. Data-driven but written like a polished recruiter memo.",
+  "growth_narrative": "1-2 paragraphs on the firm's growth story using hiring trend and net growth data.",
+  "team_narrative": "1-2 paragraphs on the team the candidate would join — size, seniority, schools.",
+  "career_paths_narrative": "2-3 paragraphs on what this firm does for a career. Reference exit data — in-house rates, top destinations, lateral moves.",
+  "candidate_fit_narrative": "2-3 paragraphs personalizing the pitch to the specific candidate using their school, current firm, practice area, and graduation year. If no candidate data, write a compelling generic 'ideal candidate' profile.",
+  "custom_section_title": "Title for the custom section (empty string if no custom prompt provided)",
+  "custom_section_narrative": "Response to the custom prompt if provided, otherwise empty string",
+  "closing": "1-2 sentence punchy close that creates urgency or frames the opportunity"
+}
+
+Write in a professional but engaging tone. Use specific data. All text is ready to drop into a PDF.\
+"""
+
+
+def _generate_firm_pitch_narratives(data, custom_prompt, tone, anonymize):
+    """Call Claude to generate firm pitch narratives. Returns parsed JSON dict."""
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+    matched_firm = data.get("matched_firm", "")
+    meta = data.get("firm_meta", {})
+
+    lines = []
+    lines.append(f"FIRM: {matched_firm}")
+    lines.append(f"Total Attorneys: {meta.get('total_attorneys', 'N/A')}")
+    lines.append(f"PPP: {meta.get('ppp', 'N/A')}")
+    lines.append(
+        f"Partners: {meta.get('partners', 'N/A')} | "
+        f"Counsel: {meta.get('counsel', 'N/A')} | "
+        f"Associates: {meta.get('associates', 'N/A')}"
+    )
+    offices = data.get("offices", [])
+    lines.append(f"Offices ({len(offices)}): {', '.join(offices[:8])}")
+    practices = data.get("firm_practices", [])
+    lines.append(f"Practice Areas: {', '.join(practices[:10])}")
+
+    lines.append("")
+    lines.append("HIRING TREND (laterals INTO firm by year):")
+    for y, c in sorted(data.get("hires_by_year", {}).items()):
+        lines.append(f"  {y}: {c} hires")
+
+    lines.append("")
+    lines.append("NET GROWTH (hires minus departures by year):")
+    for y, c in sorted(data.get("net_growth", {}).items()):
+        lines.append(f"  {y}: {c:+d}")
+
+    lines.append("")
+    lines.append("EXIT BREAKDOWN (where attorneys go after this firm):")
+    for t, c in sorted(data.get("dest_breakdown", {}).items(), key=lambda x: x[1], reverse=True)[:8]:
+        lines.append(f"  {t}: {c}")
+    lines.append(f"  In-house rate: {data.get('inhouse_pct', 0)}%")
+    lines.append(f"  Lateral-out rate: {data.get('lateral_out_pct', 0)}%")
+    lines.append(f"  Government rate: {data.get('govt_pct', 0)}%")
+    top_ih = data.get("inhouse_destinations", [])[:5]
+    if top_ih:
+        lines.append(f"  Top in-house: {', '.join(d['name'] for d in top_ih)}")
+
+    lines.append("")
+    lines.append("TOP FEEDER FIRMS (law firm laterals INTO this firm):")
+    for f in data.get("feeder_firms", [])[:5]:
+        lines.append(f"  {f['name']}: {f['count']} hires")
+
+    lines.append("")
+    lines.append("TOP FEEDER SCHOOLS:")
+    for s in data.get("feeder_schools", [])[:5]:
+        lines.append(f"  {s['name']}: {s['count']} hires")
+
+    team_by_title = data.get("team_by_title", {})
+    if team_by_title:
+        lines.append("")
+        lines.append(f"CURRENT TEAM ({data.get('team_size', 0)} attorneys in DB):")
+        for t, c in list(team_by_title.items())[:5]:
+            lines.append(f"  {t}: {c}")
+
+    cand = data.get("candidate")
+    if cand:
+        lines.append("")
+        lines.append("CANDIDATE PROFILE:")
+        lines.append(f"  Name: {cand.get('name', '')}")
+        lines.append(f"  Current Firm: {cand.get('current_firm', '')}")
+        lines.append(f"  Title: {cand.get('title', '')}")
+        lines.append(f"  Law School: {cand.get('law_school', '')}")
+        lines.append(f"  Graduation Year: {cand.get('graduation_year', '')}")
+        lines.append(f"  Practice Areas: {cand.get('practice_areas', '')}")
+        lines.append(f"  School Rank in Feeder List: #{cand.get('school_rank', 'N/A')}")
+        lines.append(f"  Current Firm Rank in Feeder List: #{cand.get('firm_rank', 'N/A')}")
+        if anonymize:
+            lines.append(
+                "  NOTE: Do not use the candidate's name or current firm name in "
+                "candidate_fit_narrative — refer to them generically."
+            )
+
+    if custom_prompt:
+        lines.append("")
+        lines.append(f"CUSTOM SECTION REQUEST: {custom_prompt}")
+
+    tone_line = f"\nTONE: {tone}" if tone and tone != "professional" else ""
+    user_prompt = "\n".join(lines) + tone_line + "\n\nGenerate the firm pitch narratives as the specified JSON."
+
+    try:
+        response = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=4000,
+            temperature=0,
+            system=FIRM_PITCH_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        text = response.content[0].text.strip()
+        if text.startswith("```"):
+            text = re.sub(r"^```(?:json)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
+        return _repair_truncated_json(text)
+    except Exception as e:
+        print(f"[Firm pitch narrative error] {e}")
+        traceback.print_exc()
+        return {
+            "headline": f"{matched_firm} — A Platform for Your Next Chapter",
+            "executive_pitch": f"{matched_firm} is a leading firm with strong lateral hiring momentum.",
+            "growth_narrative": "The firm has demonstrated consistent growth over recent years.",
+            "team_narrative": "The team offers a collaborative environment for senior legal professionals.",
+            "career_paths_narrative": "Alumni pursue diverse paths including in-house roles, government, and lateral moves.",
+            "candidate_fit_narrative": "Based on your background, this firm represents an excellent fit.",
+            "custom_section_title": "",
+            "custom_section_narrative": "",
+            "closing": "This is an opportunity worth serious consideration.",
+        }
+
+
+# ---------------------------------------------------------------------------
+# Firm Pitch — PDF assembly
+# ---------------------------------------------------------------------------
+
+def _assemble_firm_pitch_pdf(narratives, data, recruiter_info, anonymize):
+    """Assemble the firm pitch PDF. Returns BytesIO."""
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter,
+                            topMargin=0.5 * inch, bottomMargin=0.5 * inch,
+                            leftMargin=0.6 * inch, rightMargin=0.6 * inch)
+
+    styles = getSampleStyleSheet()
+    PRIMARY = HexColor("#0059FF")
+    DARK = HexColor("#151515")
+    GRAY = HexColor("#696969")
+    LIGHT_BG = HexColor("#E0F1FF")
+
+    style_headline = ParagraphStyle("FPHeadline", parent=styles["Heading1"],
+                                    fontSize=16, leading=20, textColor=DARK, spaceAfter=6)
+    style_body = ParagraphStyle("FPBody", parent=styles["Normal"],
+                                fontSize=9.5, leading=13, textColor=HexColor("#313131"), spaceAfter=6)
+    style_small = ParagraphStyle("FPSmall", parent=styles["Normal"],
+                                 fontSize=8, leading=10, textColor=GRAY)
+    style_footer = ParagraphStyle("FPFooter", parent=styles["Normal"],
+                                  fontSize=8, leading=10, textColor=GRAY, alignment=TA_CENTER)
+    style_metric_label = ParagraphStyle("FPMLabel", parent=styles["Normal"],
+                                        fontSize=7, leading=9, textColor=GRAY, alignment=TA_CENTER)
+    style_metric_value = ParagraphStyle("FPMVal", parent=styles["Normal"],
+                                        fontSize=14, leading=16, textColor=PRIMARY,
+                                        fontName="Helvetica-Bold", alignment=TA_CENTER)
+    style_pill = ParagraphStyle("FPPill", parent=styles["Normal"],
+                                fontSize=8, leading=12, textColor=PRIMARY)
+
+    matched_firm = data.get("matched_firm", "")
+    meta = data.get("firm_meta", {})
+
+    def _section_header(title):
+        p = Paragraph(
+            f"<b>{title}</b>",
+            ParagraphStyle("FPSH", parent=styles["Normal"], fontSize=9, leading=11,
+                           textColor=white, fontName="Helvetica-Bold")
+        )
+        t = Table([[p]], colWidths=[7.0 * inch])
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), PRIMARY),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ]))
+        return t
+
+    def _header_bar():
+        conf_text = Paragraph('<font color="#B4B4B4" size="8">CONFIDENTIAL</font>', styles["Normal"])
+        date_text = Paragraph(
+            f'<font color="#B4B4B4" size="8">{datetime.now().strftime("%B %d, %Y")}</font>',
+            ParagraphStyle("FPRight", parent=styles["Normal"], alignment=TA_RIGHT)
+        )
+        ht = Table([[conf_text, date_text]], colWidths=[3.5 * inch, 3.5 * inch])
+        ht.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), DARK),
+            ("TOPPADDING", (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ("LEFTPADDING", (0, 0), (0, 0), 12),
+            ("RIGHTPADDING", (-1, -1), (-1, -1), 12),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ]))
+        return ht
+
+    def _side_by_side_charts(buf1, buf2, w=3.3, h=2.2):
+        cells = []
+        if buf1:
+            buf1.seek(0)
+            cells.append(RLImage(buf1, width=w * inch, height=h * inch))
+        if buf2:
+            buf2.seek(0)
+            cells.append(RLImage(buf2, width=w * inch, height=h * inch))
+        if not cells:
+            return None
+        while len(cells) < 2:
+            cells.append("")
+        ct = Table([cells], colWidths=[3.5 * inch, 3.5 * inch])
+        ct.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ]))
+        return ct
+
+    elements = []
+    charts = data.get("_charts", {})
+
+    # ══════════════ PAGE 1 ══════════════
+    elements.append(_header_bar())
+    elements.append(Spacer(1, 12))
+
+    # Headline
+    headline = narratives.get("headline", f"{matched_firm} — Career Opportunity Overview")
+    elements.append(Paragraph(headline, style_headline))
+    elements.append(Spacer(1, 4))
+
+    # The Opportunity
+    elements.append(_section_header("THE OPPORTUNITY"))
+    elements.append(Spacer(1, 4))
+    exec_pitch = narratives.get("executive_pitch", "")
+    if exec_pitch:
+        elements.append(Paragraph(exec_pitch, style_body))
+
+    # Firm Snapshot metrics
+    elements.append(Spacer(1, 8))
+    offices = data.get("offices", [])
+    m1 = [Paragraph("ATTORNEYS", style_metric_label),
+          Paragraph(str(meta.get("total_attorneys", "—")), style_metric_value)]
+    m2 = [Paragraph("PPP", style_metric_label),
+          Paragraph(str(meta.get("ppp", "—")), style_metric_value)]
+    m3 = [Paragraph("OFFICES", style_metric_label),
+          Paragraph(str(len(offices)), style_metric_value)]
+    snap = Table([[m1, m2, m3]], colWidths=[2.33 * inch, 2.33 * inch, 2.33 * inch])
+    snap.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), LIGHT_BG),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("LINEAFTER", (0, 0), (1, -1), 0.5, HexColor("#B4D4FF")),
+    ]))
+    elements.append(snap)
+
+    practices = data.get("firm_practices", [])
+    if practices:
+        elements.append(Spacer(1, 6))
+        pills_text = "  ".join(
+            f'<font color="#0059FF">[{p}]</font>' for p in practices[:12])
+        elements.append(Paragraph(pills_text, style_pill))
+
+    # Growth Story
+    elements.append(Spacer(1, 10))
+    elements.append(_section_header("GROWTH STORY"))
+    elements.append(Spacer(1, 4))
+    growth_nar = narratives.get("growth_narrative", "")
+    if growth_nar:
+        elements.append(Paragraph(growth_nar, style_body))
+
+    growth_ct = _side_by_side_charts(charts.get("hiring_trend"), charts.get("net_growth"))
+    if growth_ct:
+        elements.append(Spacer(1, 4))
+        elements.append(growth_ct)
+
+    # ══════════════ PAGE 2 ══════════════
+    elements.append(PageBreak())
+    elements.append(_header_bar())
+    elements.append(Spacer(1, 12))
+
+    # Your Fit
+    elements.append(_section_header("YOUR FIT"))
+    elements.append(Spacer(1, 4))
+    fit_nar = narratives.get("candidate_fit_narrative", "")
+    if fit_nar:
+        elements.append(Paragraph(fit_nar, style_body))
+
+    feeder_ct = _side_by_side_charts(charts.get("feeder_schools"), charts.get("feeder_firms"))
+    if feeder_ct:
+        elements.append(Spacer(1, 6))
+        elements.append(feeder_ct)
+
+    # The Team You'd Join
+    elements.append(Spacer(1, 8))
+    elements.append(_section_header("THE TEAM YOU'D JOIN"))
+    elements.append(Spacer(1, 4))
+    team_nar = narratives.get("team_narrative", "")
+    if team_nar:
+        elements.append(Paragraph(team_nar, style_body))
+    team_chart = charts.get("team_seniority")
+    if team_chart:
+        team_chart.seek(0)
+        elements.append(RLImage(team_chart, width=4.5 * inch, height=2.2 * inch))
+
+    # Career Paths & Exit Opportunities
+    elements.append(Spacer(1, 8))
+    elements.append(_section_header("CAREER PATHS & EXIT OPPORTUNITIES"))
+    elements.append(Spacer(1, 4))
+    paths_nar = narratives.get("career_paths_narrative", "")
+    if paths_nar:
+        elements.append(Paragraph(paths_nar, style_body))
+
+    exit_ct = _side_by_side_charts(charts.get("exit_breakdown"), charts.get("inhouse_destinations"),
+                                   w=3.3, h=2.2)
+    if exit_ct:
+        elements.append(exit_ct)
+
+    # ══════════════ PAGE 3 (custom section only if present) ══════════════
+    custom_title = narratives.get("custom_section_title", "")
+    custom_nar = narratives.get("custom_section_narrative", "")
+    if custom_nar:
+        elements.append(PageBreak())
+        elements.append(_header_bar())
+        elements.append(Spacer(1, 12))
+        elements.append(_section_header(custom_title or "Additional Insights"))
+        elements.append(Spacer(1, 4))
+        elements.append(Paragraph(custom_nar, style_body))
+
+    # Closing
+    closing = narratives.get("closing", "")
+    if closing:
+        elements.append(Spacer(1, 14))
+        elements.append(HRFlowable(width="100%", thickness=0.5, color=HexColor("#EDEDED")))
+        elements.append(Spacer(1, 6))
+        elements.append(Paragraph(
+            f"<i>{closing}</i>",
+            ParagraphStyle("FPHook", parent=style_body, fontSize=10, textColor=DARK)
+        ))
+
+    # Recruiter footer
+    elements.append(Spacer(1, 16))
+    elements.append(HRFlowable(width="100%", thickness=0.5, color=HexColor("#EDEDED")))
+    footer_parts = []
+    if recruiter_info.get("name"):
+        footer_parts.append(f'<b>{recruiter_info["name"]}</b>')
+    if recruiter_info.get("title"):
+        footer_parts.append(recruiter_info["title"])
+    if recruiter_info.get("contact"):
+        footer_parts.append(recruiter_info["contact"])
+    if footer_parts:
+        elements.append(Spacer(1, 4))
+        elements.append(Paragraph(" | ".join(footer_parts), style_footer))
+
+    doc.build(elements)
+    buf.seek(0)
+    return buf
+
+
+# ---------------------------------------------------------------------------
 # Pitch API endpoints
 # ---------------------------------------------------------------------------
 
@@ -2284,7 +3102,9 @@ def generate_pitch_pdf():
         if match.empty:
             return jsonify({"error": "Attorney not found"}), 404
         attorney_row = match.iloc[0]
-        attorney_data = _serialize_candidate(attorney_row.to_dict())
+        att_dict = attorney_row.to_dict()
+        att_dict["attorneyBio"] = get_attorney_full_bio(att_dict.get("id", ""))
+        attorney_data = _serialize_candidate(att_dict)
 
         # 2. Load job
         job_data = {}
@@ -2372,6 +3192,65 @@ def generate_pitch_pdf():
         return jsonify({"error": str(e)}), 500
 
 
+def _custom_attorney_to_candidate(ca, keywords=None, practice_areas=None):
+    """Convert a custom_attorney dict to the same shape as _serialize_candidate."""
+    name = f"{ca.get('first_name', '')} {ca.get('last_name', '')}".strip()
+    # Basic keyword-based score
+    score = 50  # baseline for custom records
+    if keywords:
+        text = " ".join([
+            ca.get("bio", "") or "",
+            ca.get("practice_areas", "") or "",
+            ca.get("specialty", "") or "",
+            ca.get("prior_experience", "") or "",
+        ]).lower()
+        hits = sum(1 for kw in keywords if kw.lower() in text)
+        score = min(95, 50 + hits * 8)
+    if practice_areas:
+        pa_text = (ca.get("practice_areas", "") or "").lower()
+        if any(pa.lower() in pa_text for pa in practice_areas):
+            score = min(99, score + 15)
+
+    tier = "Tier 1" if score >= 80 else ("Tier 2" if score >= 60 else "Tier 3")
+    return {
+        "id": f"custom_{ca['id']}",
+        "rank": 0,
+        "tier": tier,
+        "name": name,
+        "first_name": ca.get("first_name", ""),
+        "last_name": ca.get("last_name", ""),
+        "current_firm": ca.get("current_firm", ""),
+        "title": ca.get("title", ""),
+        "graduation_year": ca.get("graduation_year", ""),
+        "law_school": ca.get("law_school", ""),
+        "bar_admission": ca.get("bar_admissions", ""),
+        "specialties": ca.get("specialty", ""),
+        "practice_areas": ca.get("practice_areas", ""),
+        "prior_firms": ca.get("prior_experience", ""),
+        "pattern_matches": "",
+        "qualifications_summary": ca.get("bio", "") or ca.get("summary", ""),
+        "match_score": score,
+        "photo_url": ca.get("photo_url", ""),
+        "email": ca.get("email", ""),
+        "phone_primary": ca.get("phone", ""),
+        "linkedinURL": ca.get("linkedin_url", ""),
+        "profileURL": "",
+        "attorneyBio": ca.get("bio", ""),
+        "undergraduate": ca.get("undergraduate", ""),
+        "llm_school": ca.get("llm_school", ""),
+        "llm_year": "",
+        "llm_specialty": ca.get("llm_specialty", ""),
+        "clerkships": ca.get("clerkships", ""),
+        "raw_acknowledgements": "",
+        "languages": ca.get("languages", ""),
+        "location": ", ".join(filter(None, [ca.get("location_city", ""), ca.get("location_state", "")])),
+        "scraped_on": ca.get("updated_at", ""),
+        "is_boomerang": False,
+        "source": "custom",
+        "attorney_source": "custom",
+    }
+
+
 @app.route("/api/search", methods=["POST"])
 def search():
     data = request.get_json()
@@ -2379,6 +3258,7 @@ def search():
     use_ai = data.get("use_ai", True)
     exact_firm = data.get("firm_name", "")  # When provided, skip fuzzy extraction
     skip_patterns = data.get("skip_patterns", False)
+    source_filter = data.get("source", "all")  # "all", "fp", "custom"
     if not jd_text.strip():
         return jsonify({"error": "Please provide a job description."}), 400
 
@@ -2475,6 +3355,32 @@ def search():
                 entry["is_boomerang"] = True
         scored.append(entry)
 
+    # Build custom attorneys and merge (if source_filter allows)
+    if source_filter != "fp":
+        city_str = " / ".join(cities) if cities else ""
+        custom_atts = ats_db.list_custom_attorneys(
+            search="",
+            practice_area=practice_areas[0] if practice_areas else "",
+            location=cities[0] if cities else "",
+            grad_year_min=yr_min,
+            grad_year_max=yr_max,
+        )
+        custom_candidates = [_custom_attorney_to_candidate(ca, keywords, practice_areas) for ca in custom_atts]
+    else:
+        custom_candidates = []
+
+    # Mark FP candidates with source
+    for s in scored:
+        s.setdefault("source", "fp")
+        s.setdefault("attorney_source", "fp")
+
+    # Filter by source_filter
+    if source_filter == "fp":
+        pass  # scored already contains only FP
+    elif source_filter == "custom":
+        scored = []
+    # else "all" — keep scored as-is, will merge below
+
     # 5. Determine analysis mode
     city = " / ".join(cities) if cities else ""
     meta = {
@@ -2515,18 +3421,27 @@ def search():
                     ac_name = (ac.get("name") or "").strip().lower()
                     original = shortlist_by_name.get(ac_name, {})
                     merged = {**original, **ac}  # Claude fields override
-                    ai_candidates.append(_serialize_candidate(merged))
+                    cand = _serialize_candidate(merged)
+                    cand["source"] = "fp"
+                    cand["attorney_source"] = "fp"
+                    ai_candidates.append(cand)
+                # Merge custom candidates
+                if source_filter != "fp":
+                    all_candidates = ai_candidates + custom_candidates
+                    all_candidates.sort(key=lambda c: -(c.get("match_score") or 0))
+                else:
+                    all_candidates = ai_candidates
                 _session["jd"] = jd_text
-                _session["candidates"] = ai_candidates
+                _session["candidates"] = all_candidates
                 _session["patterns"] = patterns
                 _session["meta"] = meta
                 _session["history"] = []
                 return jsonify({
                     "mode": "ai",
                     "chat_response": claude_result.get("chat_summary", ""),
-                    "candidates": ai_candidates,
+                    "candidates": all_candidates,
                     "hiring_patterns": _sanitize_for_json(patterns),
-                    "meta": _sanitize_for_json({**meta, "result_count": len(ai_candidates), "ai_used": True}),
+                    "meta": _sanitize_for_json({**meta, "result_count": len(all_candidates), "ai_used": True}),
                 })
         except Exception:
             ai_error = traceback.format_exc()
@@ -2613,11 +3528,24 @@ def search():
     # Serialize candidates for Quick Match (include all profile fields)
     candidates = []
     for r in results:
-        candidates.append(_serialize_candidate(r))
+        cand = _serialize_candidate(r)
+        cand["source"] = "fp"
+        cand["attorney_source"] = "fp"
+        candidates.append(cand)
+
+    # Merge custom candidates into quick-match results
+    if source_filter != "fp":
+        all_candidates = candidates + custom_candidates
+        all_candidates.sort(key=lambda c: -(c.get("match_score") or 0))
+        # Re-number ranks
+        for i, c in enumerate(all_candidates):
+            c["rank"] = i + 1
+    else:
+        all_candidates = candidates
 
     # Save to session for follow-ups
     _session["jd"] = jd_text
-    _session["candidates"] = candidates
+    _session["candidates"] = all_candidates
     _session["patterns"] = patterns
     _session["meta"] = meta
     _session["history"] = []
@@ -2625,7 +3553,7 @@ def search():
     return jsonify({
         "mode": "quick",
         "chat_response": chat_response,
-        "candidates": candidates,
+        "candidates": all_candidates,
         "tier_summaries": [
             {"tier": f"Tier {t}", "title": lbl, "names": ", ".join(tier_summaries[t]["names"]),
              "description": f"{tier_summaries[t]['count']} candidates matched at this level."}
@@ -2633,7 +3561,7 @@ def search():
             if t in tier_summaries
         ],
         "hiring_patterns": _sanitize_for_json(patterns),
-        "meta": _sanitize_for_json({**meta, "result_count": len(candidates), "ai_used": False}),
+        "meta": _sanitize_for_json({**meta, "result_count": len(all_candidates), "ai_used": False}),
     })
 
 
@@ -2997,18 +3925,26 @@ def _send_single_email(to_addr, subject, body, settings):
         return False, str(e)
 
 
-def _log_email(to_addr, candidate_name, subject, status, error=""):
-    """Append a row to data/email_log.csv."""
-    log_path = os.path.join(DATA_DIR, "email_log.csv")
-    file_exists = os.path.exists(log_path)
-    with open(log_path, "a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        if not file_exists:
-            writer.writerow(["timestamp", "to", "candidate_name", "subject", "status", "error"])
-        writer.writerow([
-            datetime.now().isoformat(timespec="seconds"),
-            to_addr, candidate_name, subject, status, error,
-        ])
+def _log_email(to_addr, candidate_name, subject, status, error="", body="", **kwargs):
+    """Log an email send to SQLite.
+    # TODO: Nylas webhook will update opened_at/clicked_at/replied_at/nylas_* fields
+    #       via POST /api/email/webhook once Nylas integration is configured.
+    """
+    ats_db.log_email(
+        recipient_email=to_addr,
+        candidate_name=candidate_name,
+        subject=subject,
+        status=status,
+        error=error,
+        body=body,
+        attorney_id=kwargs.get("attorney_id", ""),
+        attorney_source=kwargs.get("attorney_source", "fp"),
+        job_id=kwargs.get("job_id"),
+        job_title=kwargs.get("job_title", ""),
+        batch_id=kwargs.get("batch_id", ""),
+        sent_by=kwargs.get("sent_by", "Admin"),
+        email_type=kwargs.get("email_type", "individual"),
+    )
 
 
 @app.route("/api/email/draft", methods=["POST"])
@@ -3093,6 +4029,10 @@ def api_email_draft_personalized():
     jd_text = data.get("jd", "")
     firm_name = data.get("firm_name", "")
     meta = data.get("meta", {})
+
+    # Enrich bio on-demand if not present (dropped from main DF to save memory)
+    if not attorney.get("attorneyBio") and attorney.get("id"):
+        attorney["attorneyBio"] = get_attorney_full_bio(attorney["id"])
 
     # Build rich attorney profile
     name = attorney.get("name") or f"{attorney.get('first_name', '')} {attorney.get('last_name', '')}".strip()
@@ -3229,6 +4169,10 @@ def send_emails():
     bcc = data.get("bcc", "")
     settings = _load_email_settings()
 
+    batch_id = str(uuid.uuid4()) if len(recipients) > 1 else ""
+    email_type = "bulk" if len(recipients) > 1 else "individual"
+    sent_by = session.get("user_name", "Admin")
+
     results = []
     for i, recip in enumerate(recipients):
         to_addr = recip.get("email", "")
@@ -3240,7 +4184,15 @@ def send_emails():
         body = _resolve_merge(body_template, recip, settings)
         ok, err = _send_single_email(to_addr, subject, body, settings)
         status = "sent" if ok else "failed"
-        _log_email(to_addr, candidate_name, subject, status, err or "")
+        _log_email(to_addr, candidate_name, subject, status, err or "",
+                   body=body,
+                   attorney_id=str(recip.get("id") or recip.get("attorney_id") or ""),
+                   attorney_source=recip.get("attorney_source", "fp"),
+                   job_id=data.get("job_id"),
+                   job_title=data.get("job_title", ""),
+                   batch_id=batch_id,
+                   sent_by=sent_by,
+                   email_type=email_type)
         results.append({"name": candidate_name, "status": status, "error": err})
         if i < len(recipients) - 1:
             time.sleep(1)
@@ -3250,13 +4202,81 @@ def send_emails():
 
 @app.route("/api/email/log", methods=["GET"])
 def get_email_log():
-    log_path = os.path.join(DATA_DIR, "email_log.csv")
-    if not os.path.exists(log_path):
-        return jsonify({"entries": []})
-    with open(log_path, "r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        entries = list(reader)
-    entries.reverse()
+    status_filter = request.args.get("status", "")
+    q = request.args.get("q", "")
+    entries = ats_db.get_email_log(status_filter=status_filter, q=q)
+    stats = ats_db.get_email_stats()
+    return jsonify({"entries": entries, "stats": stats})
+
+
+@app.route("/api/email/history/<attorney_id>", methods=["GET"])
+def get_email_history(attorney_id):
+    """Return email history for a specific attorney (for profile card)."""
+    recipient_email = request.args.get("email", "")
+    entries = ats_db.get_email_history_by_attorney(attorney_id, recipient_email=recipient_email)
+    return jsonify({"entries": entries})
+
+
+@app.route("/api/email/counts", methods=["GET"])
+def get_email_counts():
+    """Return email send/open counts grouped by attorney_id (for kanban badges)."""
+    return jsonify(ats_db.get_email_counts_for_pipeline())
+
+
+@app.route("/api/email/webhook", methods=["POST"])
+def email_webhook():
+    """
+    Stub endpoint for future Nylas webhook integration.
+
+    TODO: Nylas will POST events here when emails are opened, clicked, or replied to.
+    Expected payload format (Nylas v3 webhooks):
+    {
+        "type": "message.opened" | "message.link_clicked" | "thread.replied" | "message.bounced",
+        "data": {
+            "message_id": "...",   # maps to nylas_message_id in email_log
+            "thread_id": "...",    # maps to nylas_thread_id in email_log
+            "timestamp": 1234567890
+        }
+    }
+
+    When connected, this endpoint should:
+    - message.opened    → UPDATE email_log SET opened_at=?, opened_count=opened_count+1
+                          WHERE nylas_message_id=?
+    - message.link_clicked → UPDATE email_log SET clicked_at=?, clicked_count=clicked_count+1
+                             WHERE nylas_message_id=?
+    - thread.replied    → UPDATE email_log SET replied_at=? WHERE nylas_thread_id=?
+    - message.bounced   → UPDATE email_log SET bounced_at=? WHERE nylas_message_id=?
+
+    Also TODO: Verify Nylas webhook signature from X-Nylas-Signature header.
+    """
+    # TODO: implement Nylas webhook processing
+    return jsonify({"ok": True, "message": "Webhook received (Nylas integration pending)"}), 200
+
+
+@app.route("/api/email/hub", methods=["GET"])
+def api_email_hub_list():
+    """Email Hub: return grouped email sends with optional filters."""
+    q = request.args.get("q", "")
+    job_id = request.args.get("job_id", "")
+    days = request.args.get("days", "")
+    status = request.args.get("status", "")
+    page = int(request.args.get("page", 1))
+    per_page = int(request.args.get("per_page", 25))
+    try:
+        job_id_int = int(job_id) if job_id else None
+    except (ValueError, TypeError):
+        job_id_int = None
+    emails, total, stats = ats_db.get_email_hub_list(
+        q=q, job_id=job_id_int, days=int(days) if days else None,
+        status_filter=status, page=page, per_page=per_page
+    )
+    return jsonify({"emails": emails, "total": total, "stats": stats})
+
+
+@app.route("/api/email/hub/<group_id>", methods=["GET"])
+def api_email_hub_detail(group_id):
+    """Email Hub detail: return all recipients for a batch or single email."""
+    entries = ats_db.get_email_hub_detail(group_id)
     return jsonify({"entries": entries})
 
 
@@ -3406,6 +4426,9 @@ def api_add_to_pipeline():
         attorney_id = c.get("attorney_id") or c.get("id", "")
         if not attorney_id:
             continue
+        attorney_source = c.get("attorney_source") or c.get("source") or "fp"
+        if attorney_source not in ("fp", "custom"):
+            attorney_source = "fp"
         res = ats_db.add_to_pipeline(
             job_id=job_id,
             attorney_id=str(attorney_id),
@@ -3415,6 +4438,7 @@ def api_add_to_pipeline():
             stage=stage,
             notes=notes,
             placement_fee=placement_fee,
+            attorney_source=attorney_source,
         )
         results.append({**res, "attorney_id": str(attorney_id), "name": c.get("name", "")})
     return jsonify({"ok": True, "results": results})
@@ -3480,7 +4504,229 @@ def api_activity_log():
 
 @app.route("/api/pipeline/stats", methods=["GET"])
 def api_pipeline_stats():
-    return jsonify(ats_db.get_pipeline_stats())
+    job_id = request.args.get("job_id", type=int)
+    stats = ats_db.get_pipeline_stats(job_id)
+    result = {"stats": stats}
+    if job_id:
+        job = ats_db.get_job(job_id)
+        result["job"] = job
+    return jsonify(result)
+
+
+# ===========================================================================
+# Custom Records — Attorneys, Jobs, Firms
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Custom Attorneys
+# ---------------------------------------------------------------------------
+
+@app.route("/api/custom/attorneys", methods=["POST"])
+def api_create_custom_attorney():
+    data = request.get_json(force=True)
+    if not data.get("first_name") or not data.get("last_name"):
+        return jsonify({"error": "first_name and last_name are required"}), 400
+    new_id = ats_db.create_custom_attorney(data)
+    attorney = ats_db.get_custom_attorney(new_id)
+    return jsonify({"ok": True, "id": new_id, "attorney": attorney})
+
+
+@app.route("/api/custom/attorneys", methods=["GET"])
+def api_list_custom_attorneys():
+    search = request.args.get("search", "")
+    practice_area = request.args.get("practice_area", "")
+    location = request.args.get("location", "")
+    grad_year_min = request.args.get("grad_year_min", type=int)
+    grad_year_max = request.args.get("grad_year_max", type=int)
+    attorneys = ats_db.list_custom_attorneys(
+        search=search,
+        practice_area=practice_area,
+        location=location,
+        grad_year_min=grad_year_min,
+        grad_year_max=grad_year_max,
+    )
+    return jsonify({"attorneys": attorneys, "total": len(attorneys)})
+
+
+@app.route("/api/custom/attorneys/<int:atty_id>", methods=["GET"])
+def api_get_custom_attorney(atty_id):
+    attorney = ats_db.get_custom_attorney(atty_id)
+    if not attorney:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify({"attorney": attorney})
+
+
+@app.route("/api/custom/attorneys/<int:atty_id>", methods=["PUT"])
+def api_update_custom_attorney(atty_id):
+    data = request.get_json(force=True)
+    ok = ats_db.update_custom_attorney(atty_id, data)
+    if not ok:
+        return jsonify({"error": "No valid fields to update"}), 400
+    attorney = ats_db.get_custom_attorney(atty_id)
+    return jsonify({"ok": True, "attorney": attorney})
+
+
+@app.route("/api/custom/attorneys/<int:atty_id>", methods=["DELETE"])
+def api_delete_custom_attorney(atty_id):
+    ats_db.delete_custom_attorney(atty_id)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/custom/attorneys/<int:atty_id>/resume", methods=["POST"])
+def api_upload_resume(atty_id):
+    if "resume" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+    f = request.files["resume"]
+    if not f.filename:
+        return jsonify({"error": "Empty filename"}), 400
+    resume_dir = os.path.join(os.path.dirname(__file__), "data", "resumes")
+    os.makedirs(resume_dir, exist_ok=True)
+    path = os.path.join(resume_dir, f"custom_{atty_id}.pdf")
+    f.save(path)
+    ats_db.update_custom_attorney(atty_id, {"resume_path": path})
+    return jsonify({"ok": True, "resume_path": path})
+
+
+# ---------------------------------------------------------------------------
+# Custom Jobs
+# ---------------------------------------------------------------------------
+
+@app.route("/api/custom/jobs", methods=["POST"])
+def api_create_custom_job():
+    data = request.get_json(force=True)
+    if not data.get("firm_name") or not data.get("job_title"):
+        return jsonify({"error": "firm_name and job_title are required"}), 400
+    new_id = ats_db.create_custom_job(data)
+    job = ats_db.get_custom_job(new_id)
+    return jsonify({"ok": True, "id": new_id, "job": job})
+
+
+@app.route("/api/custom/jobs", methods=["GET"])
+def api_list_custom_jobs():
+    search = request.args.get("search", "")
+    status = request.args.get("status")
+    practice_area = request.args.get("practice_area")
+    jobs = ats_db.list_custom_jobs(search=search, status=status, practice_area=practice_area)
+    return jsonify({"jobs": jobs, "total": len(jobs)})
+
+
+@app.route("/api/custom/jobs/<int:job_id>", methods=["GET"])
+def api_get_custom_job(job_id):
+    job = ats_db.get_custom_job(job_id)
+    if not job:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify({"job": job})
+
+
+@app.route("/api/custom/jobs/<int:job_id>", methods=["PUT"])
+def api_update_custom_job(job_id):
+    data = request.get_json(force=True)
+    ok = ats_db.update_custom_job(job_id, data)
+    if not ok:
+        return jsonify({"error": "No valid fields to update"}), 400
+    job = ats_db.get_custom_job(job_id)
+    return jsonify({"ok": True, "job": job})
+
+
+@app.route("/api/custom/jobs/<int:job_id>", methods=["DELETE"])
+def api_delete_custom_job(job_id):
+    ats_db.delete_custom_job(job_id)
+    return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Custom Firms
+# ---------------------------------------------------------------------------
+
+@app.route("/api/custom/firms", methods=["POST"])
+def api_create_custom_firm():
+    data = request.get_json(force=True)
+    if not data.get("name"):
+        return jsonify({"error": "name is required"}), 400
+    new_id = ats_db.create_custom_firm(data)
+    firm = ats_db.get_custom_firm(new_id)
+    return jsonify({"ok": True, "id": new_id, "firm": firm})
+
+
+@app.route("/api/custom/firms", methods=["GET"])
+def api_list_custom_firms():
+    search = request.args.get("search", "")
+    firms = ats_db.list_custom_firms(search=search)
+    return jsonify({"firms": firms, "total": len(firms)})
+
+
+@app.route("/api/custom/firms/<int:firm_id>", methods=["GET"])
+def api_get_custom_firm(firm_id):
+    firm = ats_db.get_custom_firm(firm_id)
+    if not firm:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify({"firm": firm})
+
+
+@app.route("/api/custom/firms/<int:firm_id>", methods=["PUT"])
+def api_update_custom_firm(firm_id):
+    data = request.get_json(force=True)
+    ok = ats_db.update_custom_firm(firm_id, data)
+    if not ok:
+        return jsonify({"error": "No valid fields to update"}), 400
+    firm = ats_db.get_custom_firm(firm_id)
+    return jsonify({"ok": True, "firm": firm})
+
+
+@app.route("/api/custom/firms/<int:firm_id>", methods=["DELETE"])
+def api_delete_custom_firm(firm_id):
+    ats_db.delete_custom_firm(firm_id)
+    return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Record Tags & Notes (any record_type, record_source, record_id)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/records/<record_type>/<record_source>/<record_id>/tags", methods=["GET"])
+def api_get_record_tags(record_type, record_source, record_id):
+    tags = ats_db.get_record_tags(record_type, record_source, record_id)
+    return jsonify({"tags": tags})
+
+
+@app.route("/api/records/<record_type>/<record_source>/<record_id>/tags", methods=["POST"])
+def api_add_record_tag(record_type, record_source, record_id):
+    data = request.get_json(force=True)
+    tag = (data.get("tag") or "").strip()
+    if not tag:
+        return jsonify({"error": "tag is required"}), 400
+    ats_db.add_record_tag(record_type, record_source, record_id, tag)
+    tags = ats_db.get_record_tags(record_type, record_source, record_id)
+    return jsonify({"ok": True, "tags": tags})
+
+
+@app.route("/api/records/<record_type>/<record_source>/<record_id>/tags/<int:tag_id>", methods=["DELETE"])
+def api_remove_record_tag(record_type, record_source, record_id, tag_id):
+    ats_db.remove_record_tag(tag_id)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/records/<record_type>/<record_source>/<record_id>/notes", methods=["GET"])
+def api_get_record_notes(record_type, record_source, record_id):
+    notes = ats_db.get_record_notes(record_type, record_source, record_id)
+    return jsonify({"notes": notes})
+
+
+@app.route("/api/records/<record_type>/<record_source>/<record_id>/notes", methods=["POST"])
+def api_add_record_note(record_type, record_source, record_id):
+    data = request.get_json(force=True)
+    note_text = (data.get("note_text") or "").strip()
+    if not note_text:
+        return jsonify({"error": "note_text is required"}), 400
+    note_id = ats_db.add_record_note(record_type, record_source, record_id, note_text)
+    notes = ats_db.get_record_notes(record_type, record_source, record_id)
+    return jsonify({"ok": True, "note_id": note_id, "notes": notes})
+
+
+@app.route("/api/records/<record_type>/<record_source>/<record_id>/notes/<int:note_id>", methods=["DELETE"])
+def api_remove_record_note(record_type, record_source, record_id, note_id):
+    ats_db.remove_record_note(note_id)
+    return jsonify({"ok": True})
 
 
 # ---- Attorney search for pipeline add ----
@@ -3523,7 +4769,37 @@ def api_get_attorney(attorney_id):
     match = ATTORNEYS_DF[ATTORNEYS_DF["id"].astype(str) == str(attorney_id)]
     if match.empty:
         return jsonify({"error": "Attorney not found"}), 404
-    return jsonify({"attorney": _serialize_candidate(match.iloc[0].to_dict())})
+    att_dict = match.iloc[0].to_dict()
+    att_dict["attorneyBio"] = get_attorney_full_bio(att_dict.get("id", ""))
+    return jsonify({"attorney": _serialize_candidate(att_dict)})
+
+
+@app.route("/api/attorneys/<attorney_id>/full-profile", methods=["GET"])
+def api_attorney_full_profile(attorney_id):
+    """Return enriched attorney profile including pipeline entries and email history."""
+    if ATTORNEYS_DF.empty:
+        return jsonify({"error": "No attorney data"}), 404
+    match = ATTORNEYS_DF[ATTORNEYS_DF["id"].astype(str) == str(attorney_id)]
+    if match.empty:
+        return jsonify({"error": "Attorney not found"}), 404
+    att_dict = match.iloc[0].to_dict()
+    att_dict["attorneyBio"] = get_attorney_full_bio(att_dict.get("id", ""))
+    attorney = _serialize_candidate(att_dict)
+    pipeline_entries = ats_db.get_attorney_pipeline_entries(attorney_id, attorney_source="fp")
+    email_history = ats_db.get_email_history_by_attorney(attorney_id)
+    employment = ats_db.get_attorney_employment(attorney_id)
+    return jsonify({
+        "attorney": attorney,
+        "pipeline": pipeline_entries,
+        "emails": email_history,
+        "employment": employment,
+    })
+
+
+@app.route("/api/attorneys/<attorney_id>/employment", methods=["GET"])
+def api_attorney_employment(attorney_id):
+    """Return employment history for an attorney (stub — empty until API connected)."""
+    return jsonify({"employment": ats_db.get_attorney_employment(attorney_id)})
 
 
 # ---------------------------------------------------------------------------
@@ -3749,30 +5025,69 @@ def _search_jobs(params):
     return [_serialize_job(row) for _, row in df.iterrows()]
 
 
+def _serialize_custom_job(cj):
+    """Normalize a custom job dict to the same shape as _serialize_job."""
+    return {
+        "id": f"custom_{cj['id']}",
+        "firm_name": cj.get("firm_name", ""),
+        "job_title": cj.get("job_title", ""),
+        "job_location": cj.get("location", ""),
+        "job_description": cj.get("job_description", ""),
+        "practice_areas": cj.get("practice_areas", ""),
+        "specialty": cj.get("specialty", ""),
+        "min_years": cj.get("min_years", ""),
+        "max_years": cj.get("max_years", ""),
+        "status": cj.get("status", "Open"),
+        "closed_date": "",
+        "source": "custom",
+        "contact_name": cj.get("contact_name", ""),
+        "contact_email": cj.get("contact_email", ""),
+        "confidential": bool(cj.get("confidential", 0)),
+        "salary_min": cj.get("salary_min"),
+        "salary_max": cj.get("salary_max"),
+    }
+
+
 @app.route("/api/jobsearch", methods=["POST"])
 def job_search():
     data = request.get_json()
     query = data.get("query", "").strip()
     use_ai = data.get("use_ai", True)
+    source_filter = data.get("source", "all")
 
     if not query:
         return jsonify({"error": "Please describe what you're looking for."}), 400
 
-    if JOBS_DF.empty:
-        return jsonify({"error": "No jobs data loaded."}), 400
+    if JOBS_DF.empty and source_filter != "custom":
+        # Still allow custom-only search
+        pass
 
     # Parse query
     params = None
     ai_used = False
-    if use_ai and ANTHROPIC_API_KEY:
+    if use_ai and ANTHROPIC_API_KEY and not JOBS_DF.empty:
         params = _parse_job_query_with_claude(query)
         if params:
             ai_used = True
     if not params:
         params = _keyword_parse_job_query(query)
 
-    # Search
-    jobs = _search_jobs(params)
+    # Search FP jobs
+    jobs = _search_jobs(params) if source_filter != "custom" else []
+    for j in jobs:
+        j.setdefault("source", "fp")
+
+    # Merge custom jobs
+    if source_filter != "fp":
+        custom_search = query
+        custom_pa = params.get("practice_areas", [])
+        cj_list = ats_db.list_custom_jobs(
+            search=custom_search,
+            practice_area=custom_pa[0] if custom_pa else None,
+        )
+        for cj in cj_list:
+            jobs.append(_serialize_custom_job(cj))
+
     summary = params.get("summary", f"Showing results for: {query}")
 
     # Build chat response
@@ -3948,22 +5263,48 @@ def api_firms():
     if FIRMS_DF.empty:
         return jsonify({"firms": [], "total": 0})
     q = request.args.get("search", "").strip().lower()
+    source_filter = request.args.get("source", "all")
     df = FIRMS_DF.copy()
     if q:
         mask = df["Name"].str.lower().str.contains(q, na=False)
         df = df[mask]
     active_names = _get_active_firm_names()
+    all_statuses = ats_db.list_all_firm_statuses()
     firms = []
-    for _, row in df.iterrows():
-        d = _firm_to_dict(row)
-        d["has_activity"] = d["name"].strip().lower() in active_names
-        # Top matches count from cache (0 if not yet computed)
-        resolved = _resolve_dna_firm_name(d["name"])
-        cached = _top_candidates_cache.get(resolved, []) if resolved else []
-        d["top_matches"] = sum(1 for c in cached if c["match_score"] >= 60)
-        firms.append(d)
-    # Sort: active firms first, then alphabetical
-    firms.sort(key=lambda f: (not f["has_activity"], f["name"].lower()))
+    if source_filter != "custom":
+        for _, row in df.iterrows():
+            d = _firm_to_dict(row)
+            d["has_activity"] = d["name"].strip().lower() in active_names
+            # Top matches count from cache (0 if not yet computed)
+            resolved = _resolve_dna_firm_name(d["name"])
+            cached = _top_candidates_cache.get(resolved, []) if resolved else []
+            d["top_matches"] = sum(1 for c in cached if c["match_score"] >= 60)
+            d["source"] = "fp"
+            st = all_statuses.get(d["name"].strip().lower())
+            d["client_status"] = st["client_status"] if st else "Reference Only"
+            d["pinned"] = bool(st.get("pinned")) if st else False
+            d["priority"] = st["priority"] if st else "Normal"
+            firms.append(d)
+    if source_filter != "fp":
+        custom_firms_list = ats_db.list_custom_firms(search=q)
+        for cf in custom_firms_list:
+            cf["has_activity"] = False
+            cf["top_matches"] = 0
+            cf["offices"] = cf.get("office_locations", "")
+            cf["ppp_display"] = f"${cf['ppp']:,}" if cf.get("ppp") else ""
+            st = all_statuses.get((cf.get("name") or "").strip().lower())
+            cf["client_status"] = st["client_status"] if st else "Reference Only"
+            cf["pinned"] = bool(st.get("pinned")) if st else False
+            cf["priority"] = st["priority"] if st else "Normal"
+            firms.append(cf)
+    # Sort: pinned Active Clients first, then active pipeline, then alphabetical
+    STATUS_ORDER = {"Active Client": 0, "Prospect": 1, "Past Client": 2, "Reference Only": 3}
+    firms.sort(key=lambda f: (
+        not f.get("pinned", False),
+        STATUS_ORDER.get(f.get("client_status", "Reference Only"), 9),
+        not f.get("has_activity", False),
+        f["name"].lower()
+    ))
     return jsonify({"firms": firms, "total": len(firms)})
 
 
@@ -4057,8 +5398,21 @@ Rules:
     for _, row in df.iterrows():
         d = _firm_to_dict(row)
         d["has_activity"] = d["name"].strip().lower() in active_names
+        d["source"] = "fp"
         firms.append(d)
-    firms.sort(key=lambda f: (not f["has_activity"], f["name"].lower()))
+
+    # Merge custom firms
+    custom_query = " ".join(firm_names + locations + practice_areas) if (firm_names or locations or practice_areas) else ""
+    custom_firms_list = ats_db.list_custom_firms(search=custom_query)
+    for cf in custom_firms_list:
+        cf["has_activity"] = False
+        cf["top_matches"] = 0
+        # Normalize shape to match FP firms
+        cf["offices"] = cf.get("office_locations", "")
+        cf["ppp_display"] = f"${cf['ppp']:,}" if cf.get("ppp") else ""
+        firms.append(cf)
+
+    firms.sort(key=lambda f: (f.get("source", "fp") != "custom", not f["has_activity"], f["name"].lower()))
     return jsonify({"firms": firms, "total": len(firms)})
 
 
@@ -4108,6 +5462,234 @@ def api_firm_pipeline(firm_id):
     return jsonify({"candidates": candidates})
 
 
+@app.route("/api/firms/my-clients")
+def api_firms_my_clients():
+    """Return Active Client + Prospect firms enriched with job/pipeline/task data."""
+    my_firms = ats_db.get_my_client_firms()
+    enriched = []
+    for fs in my_firms:
+        firm_name = fs.get("firm_name", "")
+        fp_id = fs.get("firm_fp_id", "")
+        # Resolve firm data from FIRMS_DF
+        firm_data = {}
+        if fp_id and not FIRMS_DF.empty:
+            m = FIRMS_DF[FIRMS_DF["FP ID"] == str(fp_id)]
+            if not m.empty:
+                firm_data = _firm_to_dict(m.iloc[0])
+        elif firm_name and not FIRMS_DF.empty:
+            m2 = FIRMS_DF[FIRMS_DF["Name"].str.lower() == firm_name.lower()]
+            if not m2.empty:
+                firm_data = _firm_to_dict(m2.iloc[0])
+                if not fp_id:
+                    fp_id = firm_data.get("fp_id", "")
+        job_count = 0
+        pipeline_count = 0
+        interviewing_count = 0
+        next_task_title = None
+        next_task_due = None
+        try:
+            conn = ats_db.get_db()
+            row = conn.execute(
+                """SELECT COUNT(*) as cnt FROM jobs j
+                   JOIN employers e ON j.employer_id = e.id
+                   WHERE LOWER(e.name) = LOWER(?) AND LOWER(j.status) = 'active'""",
+                (firm_name,)
+            ).fetchone()
+            if row:
+                job_count = row["cnt"]
+            row2 = conn.execute(
+                """SELECT COUNT(*) as cnt FROM pipeline p
+                   JOIN jobs j ON p.job_id = j.id
+                   JOIN employers e ON j.employer_id = e.id
+                   WHERE LOWER(e.name) = LOWER(?)""",
+                (firm_name,)
+            ).fetchone()
+            if row2:
+                pipeline_count = row2["cnt"]
+            row3 = conn.execute(
+                """SELECT COUNT(*) as cnt FROM pipeline p
+                   JOIN jobs j ON p.job_id = j.id
+                   JOIN employers e ON j.employer_id = e.id
+                   WHERE LOWER(e.name) = LOWER(?) AND LOWER(p.stage) LIKE '%interview%'""",
+                (firm_name,)
+            ).fetchone()
+            if row3:
+                interviewing_count = row3["cnt"]
+            nt = conn.execute(
+                """SELECT title, due_date FROM tasks
+                   WHERE LOWER(firm_name) = LOWER(?) AND status != 'Completed'
+                   ORDER BY due_date ASC LIMIT 1""",
+                (firm_name,)
+            ).fetchone()
+            if nt:
+                next_task_title = nt["title"]
+                next_task_due = nt["due_date"]
+            conn.close()
+        except Exception as e:
+            print(f"[my-clients enrich] {e}")
+        entry = {**fs}
+        entry["total_attorneys"] = firm_data.get("total_attorneys", "")
+        entry["ppp"] = firm_data.get("ppp", "")
+        entry["top1"] = firm_data.get("top1", "")
+        entry["top2"] = firm_data.get("top2", "")
+        entry["top3"] = firm_data.get("top3", "")
+        entry["fp_id"] = fp_id or firm_data.get("fp_id", "")
+        entry["active_jobs"] = job_count
+        entry["pipeline_count"] = pipeline_count
+        entry["interviewing_count"] = interviewing_count
+        entry["next_task_title"] = next_task_title
+        entry["next_task_due"] = next_task_due
+        enriched.append(entry)
+    return jsonify({"firms": enriched})
+
+
+@app.route("/api/firms/recently-viewed")
+def api_firms_recently_viewed():
+    """Return recently viewed firms."""
+    firms = ats_db.get_recently_viewed(limit=8)
+    return jsonify({"firms": firms})
+
+
+@app.route("/api/firms/need-followup")
+def api_firms_need_followup():
+    """Return Active Client firms with no activity in 7+ days."""
+    try:
+        conn = ats_db.get_db()
+        from datetime import datetime, timedelta
+        cutoff = (datetime.now() - timedelta(days=7)).isoformat()
+        rows = conn.execute(
+            """SELECT firm_name, firm_fp_id, last_contact_date, updated_at
+               FROM firm_status
+               WHERE client_status = 'Active Client'
+               AND (last_contact_date IS NULL OR last_contact_date < ? OR last_contact_date = '')
+               AND (updated_at IS NULL OR updated_at < ?)
+               ORDER BY last_contact_date ASC""",
+            (cutoff[:10], cutoff)
+        ).fetchall()
+        conn.close()
+        return jsonify({"firms": [dict(r) for r in rows], "count": len(rows)})
+    except Exception as e:
+        return jsonify({"firms": [], "count": 0, "error": str(e)})
+
+
+@app.route("/api/firms/<firm_id>/status", methods=["PUT"])
+def api_firm_update_status(firm_id):
+    """Update client_status, priority, owner, notes, next_follow_up for a firm."""
+    data = request.get_json(force=True)
+    firm_name = (data.get("firm_name") or "").strip()
+    if not firm_name and not FIRMS_DF.empty:
+        m = FIRMS_DF[FIRMS_DF["FP ID"] == str(firm_id)]
+        if not m.empty:
+            firm_name = str(m.iloc[0].get("Name", ""))
+    if not firm_name:
+        return jsonify({"error": "firm_name required"}), 400
+    ats_db.upsert_firm_status(
+        firm_name=firm_name,
+        firm_fp_id=firm_id if firm_id not in ("", "undefined") else None,
+        client_status=data.get("client_status"),
+        owner=data.get("owner"),
+        priority=data.get("priority"),
+        last_contact_date=data.get("last_contact_date"),
+        next_follow_up=data.get("next_follow_up"),
+        notes=data.get("notes"),
+        pinned=data.get("pinned"),
+    )
+    return jsonify({"ok": True})
+
+
+@app.route("/api/firms/<firm_id>/pin", methods=["PUT"])
+def api_firm_pin(firm_id):
+    """Toggle pin state for a firm."""
+    data = request.get_json(force=True)
+    firm_name = (data.get("firm_name") or "").strip()
+    if not firm_name and not FIRMS_DF.empty:
+        m = FIRMS_DF[FIRMS_DF["FP ID"] == str(firm_id)]
+        if not m.empty:
+            firm_name = str(m.iloc[0].get("Name", ""))
+    if not firm_name:
+        return jsonify({"error": "firm_name required"}), 400
+    ats_db.upsert_firm_status(
+        firm_name=firm_name,
+        firm_fp_id=firm_id if firm_id not in ("", "undefined") else None,
+        pinned=data.get("pinned", True)
+    )
+    return jsonify({"ok": True})
+
+
+@app.route("/api/firms/<firm_id>/mark-active", methods=["POST"])
+def api_firm_mark_active(firm_id):
+    """Quick-mark a firm as Active Client."""
+    data = request.get_json(force=True)
+    firm_name = (data.get("firm_name") or "").strip()
+    if not firm_name and not FIRMS_DF.empty:
+        m = FIRMS_DF[FIRMS_DF["FP ID"] == str(firm_id)]
+        if not m.empty:
+            firm_name = str(m.iloc[0].get("Name", ""))
+    if not firm_name:
+        return jsonify({"error": "firm_name required"}), 400
+    ats_db.upsert_firm_status(
+        firm_name=firm_name,
+        firm_fp_id=firm_id if firm_id not in ("", "undefined") else None,
+        client_status="Active Client"
+    )
+    return jsonify({"ok": True})
+
+
+@app.route("/api/firms/<firm_id>/relationship-timeline")
+def api_firm_relationship_timeline(firm_id):
+    """Return CRM relationship timeline for a firm (notes, tasks, jobs, pipeline events)."""
+    firm_name = ""
+    if not FIRMS_DF.empty:
+        m = FIRMS_DF[FIRMS_DF["FP ID"] == str(firm_id)]
+        if not m.empty:
+            firm_name = str(m.iloc[0].get("Name", ""))
+    events = []
+    try:
+        conn = ats_db.get_db()
+        # Notes
+        for r in conn.execute(
+            "SELECT note_text as text, created_at FROM firm_notes WHERE firm_id = ? ORDER BY created_at DESC LIMIT 50",
+            (firm_id,)
+        ).fetchall():
+            events.append({"type": "note", "text": r["text"], "date": r["created_at"], "icon": "📝"})
+        # Tasks
+        for r in conn.execute(
+            """SELECT title, due_date, status FROM tasks
+               WHERE LOWER(firm_name) = LOWER(?) OR firm_fp_id = ?
+               ORDER BY due_date DESC LIMIT 30""",
+            (firm_name, str(firm_id))
+        ).fetchall():
+            events.append({"type": "task", "text": r["title"], "date": r["due_date"], "status": r["status"], "icon": "✓"})
+        # Jobs (created for this firm via employers)
+        for r in conn.execute(
+            """SELECT j.title, j.created_at, j.status FROM jobs j
+               JOIN employers e ON j.employer_id = e.id
+               WHERE LOWER(e.name) = LOWER(?)
+               ORDER BY j.created_at DESC LIMIT 20""",
+            (firm_name,)
+        ).fetchall():
+            events.append({"type": "job", "text": f"Job opened: {r['title']}", "date": r["created_at"], "status": r["status"], "icon": "💼"})
+        # Pipeline additions
+        for r in conn.execute(
+            """SELECT p.attorney_name, p.stage, p.created_at, j.title as job_title FROM pipeline p
+               JOIN jobs j ON p.job_id = j.id
+               JOIN employers e ON j.employer_id = e.id
+               WHERE LOWER(e.name) = LOWER(?)
+               ORDER BY p.created_at DESC LIMIT 30""",
+            (firm_name,)
+        ).fetchall():
+            events.append({"type": "pipeline", "text": f"{r['attorney_name']} added to pipeline ({r['stage']}) for {r['job_title']}", "date": r["created_at"], "icon": "👤"})
+        # Status changes (from firm_status updated_at)
+        st = ats_db.get_firm_status_by_fp_id(firm_id) or ats_db.get_firm_status(firm_name)
+        if st and st.get("updated_at"):
+            events.append({"type": "status", "text": f"Status: {st.get('client_status', 'Unknown')}", "date": st["updated_at"], "icon": "🏢"})
+        conn.close()
+    except Exception as e:
+        print(f"[relationship timeline] {e}")
+    events.sort(key=lambda e: e.get("date") or "", reverse=True)
+    return jsonify({"events": events[:100]})
+
+
 @app.route("/api/firms/<firm_id>")
 def api_firm_detail(firm_id):
     if FIRMS_DF.empty:
@@ -4119,6 +5701,29 @@ def api_firm_detail(firm_id):
     firm = _firm_to_dict(row)
     firm["notes"] = ats_db.get_firm_notes(firm_id)
     firm["contacts"] = ats_db.get_firm_contacts(firm_id)
+    # Include CRM status fields
+    st = ats_db.get_firm_status_by_fp_id(firm_id) or ats_db.get_firm_status(firm.get("name", ""))
+    if st:
+        firm["client_status"] = st.get("client_status", "Reference Only")
+        firm["priority"] = st.get("priority", "Normal")
+        firm["owner"] = st.get("owner", "")
+        firm["last_contact_date"] = st.get("last_contact_date", "")
+        firm["next_follow_up"] = st.get("next_follow_up", "")
+        firm["crm_notes"] = st.get("notes", "")
+        firm["pinned"] = bool(st.get("pinned", 0))
+    else:
+        firm["client_status"] = "Reference Only"
+        firm["priority"] = "Normal"
+        firm["owner"] = ""
+        firm["last_contact_date"] = ""
+        firm["next_follow_up"] = ""
+        firm["crm_notes"] = ""
+        firm["pinned"] = False
+    # Track view
+    try:
+        ats_db.track_firm_view(firm.get("name", ""), firm_id)
+    except Exception:
+        pass
     return jsonify({"firm": firm})
 
 
@@ -4296,6 +5901,8 @@ def _build_source_block(row):
     }
     lines = [f"  {k}: {v}" for k, v in fields.items() if v and str(v).strip()]
     bio = str(row.get("attorneyBio", "")).strip()
+    if not bio:
+        bio = get_attorney_full_bio(row.get("id", ""))
     if bio:
         lines.append(f"  Full Bio: {bio}")
     return "\n".join(lines)
@@ -4369,11 +5976,11 @@ def _prefilter_similar(source_row, min_criteria=1, relaxed=False, skip_location=
     df = ATTORNEYS_DF
     source_id = str(source_row.get("id", ""))
 
-    # Exclude source and attorneys with no bio
-    bio_col = df.get("attorneyBio", pd.Series("", index=df.index)).fillna("")
-    has_bio = bio_col.str.strip().str.len() > 0
+    # Exclude source attorney; use summary as content proxy (bio loaded on-demand)
+    summary_col = df.get("summary", pd.Series("", index=df.index)).fillna("")
+    has_content = summary_col.str.strip().str.len() > 0
     not_self = df["id"].astype(str) != source_id
-    hard_mask = has_bio & not_self
+    hard_mask = has_content & not_self
 
     # --- Phase 1: Hard filters (must-match) ---
 
@@ -4839,8 +6446,630 @@ def _precompute_top_candidates():
         count += 1
     print(f"[Background] Pre-computed top candidates for {count} firms.")
 
+@app.route("/debug", methods=["GET", "POST"])
+def debug_page():
+    import sqlite3 as _sq
+    db_path = ats_db.DB_PATH
+
+    def conn():
+        c = _sq.connect(db_path)
+        c.row_factory = _sq.Row
+        return c
+
+    def rows_to_html(rows, empty_msg="(no rows)"):
+        if not rows:
+            return f"<p><b>{empty_msg}</b></p>"
+        cols = rows[0].keys()
+        th = "".join(f"<th>{c}</th>" for c in cols)
+        body = ""
+        for r in rows:
+            body += "<tr>" + "".join(f"<td>{r[c]}</td>" for c in cols) + "</tr>"
+        return f"<table border=1 cellpadding=4 style='border-collapse:collapse;font-size:12px'><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table>"
+
+    html = ["<html><body><pre style='font-family:monospace'>"]
+    html.append("<h1>JAIDE ATS — Pipeline Debug Page</h1>")
+    html.append(f"<p>DB path: {db_path}</p>")
+    html.append(f"<p>DB exists: {os.path.exists(db_path)}</p>")
+
+    # ── SECTION 1: DATABASE TABLES ────────────────────────────────────────
+    html.append("<hr><h2>SECTION 1: DATABASE TABLES</h2>")
+    with conn() as c:
+        tables = [r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").fetchall()]
+    html.append(f"<p>Tables found: {tables}</p>")
+    for tbl in tables:
+        with conn() as c:
+            schema = c.execute(f"PRAGMA table_info({tbl})").fetchall()
+            count = c.execute(f"SELECT COUNT(*) FROM {tbl}").fetchone()[0]
+        cols = ", ".join(f"{r['name']} {r['type']}" for r in schema)
+        html.append(f"<p><b>{tbl}</b> — {count} rows<br>Columns: {cols}</p>")
+
+    # ── SECTION 2: PIPELINE TABLE RAW DUMP ───────────────────────────────
+    html.append("<hr><h2>SECTION 2: PIPELINE TABLE — RAW DUMP</h2>")
+    with conn() as c:
+        rows = c.execute("SELECT * FROM pipeline").fetchall()
+    if not rows:
+        html.append("<p><b style='color:red'>PIPELINE TABLE IS EMPTY — the Add to Pipeline action is not saving data</b></p>")
+    else:
+        html.append(f"<p>{len(rows)} rows found.</p>")
+        html.append(rows_to_html(rows))
+
+    # ── SECTION 3: JOBS TABLE RAW DUMP ───────────────────────────────────
+    html.append("<hr><h2>SECTION 3: JOBS TABLE — RAW DUMP</h2>")
+    with conn() as c:
+        rows = c.execute("SELECT * FROM jobs").fetchall()
+    if not rows:
+        html.append("<p><b style='color:red'>JOBS TABLE IS EMPTY — no jobs exist to assign candidates to</b></p>")
+    else:
+        html.append(f"<p>{len(rows)} rows found.</p>")
+        html.append(rows_to_html(rows))
+
+    # ── SECTION 4: EMPLOYERS TABLE RAW DUMP ──────────────────────────────
+    html.append("<hr><h2>SECTION 4: EMPLOYERS TABLE — RAW DUMP</h2>")
+    with conn() as c:
+        rows = c.execute("SELECT * FROM employers").fetchall()
+    html.append(f"<p>{len(rows)} rows found.</p>")
+    html.append(rows_to_html(rows, "(employers table empty)"))
+
+    # ── SECTION 5: WHAT THE DASHBOARD API RETURNS ────────────────────────
+    html.append("<hr><h2>SECTION 5: WHAT THE DASHBOARD API RETURNS</h2>")
+    api_url = "/api/pipeline (internal call — no filters)"
+    html.append(f"<p>Calling: <code>{api_url}</code></p>")
+    pipeline_data = ats_db.get_pipeline_all()
+    html.append(f"<p>Response pipeline count: <b>{len(pipeline_data)}</b></p>")
+    if not pipeline_data:
+        html.append("<p><b style='color:red'>THE API IS RETURNING EMPTY DATA — the problem is in the backend query (likely a JOIN that drops rows)</b></p>")
+    else:
+        html.append("<p><b style='color:green'>THE API HAS DATA — the problem is in the frontend rendering</b></p>")
+        import json as _json
+        html.append(f"<pre style='background:#f5f5f5;padding:8px;max-height:300px;overflow:auto'>{_json.dumps(pipeline_data[:3], indent=2, default=str)} ...</pre>")
+
+    # ── SECTION 6: THE ACTUAL SQL QUERY ──────────────────────────────────
+    html.append("<hr><h2>SECTION 6: THE ACTUAL SQL QUERY</h2>")
+    full_sql = """SELECT p.*, j.title as job_title, e.name as employer_name
+               FROM pipeline p
+               JOIN jobs j ON p.job_id = j.id
+               LEFT JOIN employers e ON j.employer_id = e.id
+               WHERE 1=1
+               ORDER BY p.updated_at DESC"""
+    html.append(f"<p>SQL used by <code>get_pipeline_all()</code>:</p><pre style='background:#f0f0f0;padding:8px'>{full_sql}</pre>")
+
+    html.append("<h3>6a: SELECT * FROM pipeline (no JOIN)</h3>")
+    with conn() as c:
+        rows = c.execute("SELECT * FROM pipeline").fetchall()
+    html.append(f"<p>{len(rows)} rows</p>")
+    html.append(rows_to_html(rows, "pipeline is empty"))
+
+    html.append("<h3>6b: SELECT * FROM jobs WHERE id IN (SELECT job_id FROM pipeline)</h3>")
+    with conn() as c:
+        rows = c.execute("SELECT * FROM jobs WHERE id IN (SELECT job_id FROM pipeline)").fetchall()
+    html.append(f"<p>{len(rows)} matching job rows</p>")
+    html.append(rows_to_html(rows, "(no matching jobs — this is the JOIN break point)"))
+
+    html.append("<h3>6c: Full JOIN query (same as API)</h3>")
+    with conn() as c:
+        rows = c.execute(full_sql).fetchall()
+    html.append(f"<p>{len(rows)} rows after JOIN</p>")
+    html.append(rows_to_html(rows, "(no rows returned by JOIN)"))
+
+    # ── SECTION 7: ID COMPARISON ──────────────────────────────────────────
+    html.append("<hr><h2>SECTION 7: ID COMPARISON</h2>")
+    with conn() as c:
+        pipeline_job_ids = [r[0] for r in c.execute("SELECT DISTINCT job_id FROM pipeline").fetchall()]
+        jobs_ids = [r[0] for r in c.execute("SELECT id FROM jobs").fetchall()]
+    html.append(f"<p>pipeline.job_id values: {pipeline_job_ids}</p>")
+    html.append(f"<p>jobs.id values: {jobs_ids}</p>")
+    missing = [jid for jid in pipeline_job_ids if jid not in jobs_ids]
+    if missing:
+        html.append(f"<p><b style='color:red'>ID MISMATCH FOUND — pipeline references job_id {missing} but jobs table has no matching id</b></p>")
+    elif not pipeline_job_ids:
+        html.append("<p><b style='color:orange'>pipeline table is empty — no job_id values to check</b></p>")
+    else:
+        html.append("<p><b style='color:green'>All pipeline.job_id values exist in jobs.id — JOIN should work</b></p>")
+
+    # ── SECTION 8: TEST INSERT ─────────────────────────────────────────────
+    html.append("<hr><h2>SECTION 8: TEST INSERT</h2>")
+    inserted_msg = ""
+    if request.method == "POST" and request.form.get("action") == "insert_test":
+        with conn() as c:
+            job_row = c.execute("SELECT id FROM jobs LIMIT 1").fetchone()
+            if job_row:
+                test_job_id = job_row[0]
+                c.execute("""INSERT INTO pipeline (job_id, attorney_id, attorney_name, attorney_firm,
+                             attorney_email, stage, added_by, notes, placement_fee, added_at, updated_at)
+                             VALUES (?, 'TEST-001', 'Test Candidate Debug', 'Test Firm Debug',
+                             'test@debug.com', 'Identified', 'Debug', '', 0, datetime('now'), datetime('now'))""",
+                          (test_job_id,))
+                c.commit()
+                inserted_msg = f"<p><b style='color:green'>TEST ROW INSERTED with job_id={test_job_id}. Reload this page to see it in Section 2.</b></p>"
+            else:
+                inserted_msg = "<p><b style='color:red'>Cannot insert test row — jobs table is empty. Add a job first.</b></p>"
+
+    html.append(inserted_msg)
+    html.append("""<form method="POST">
+        <input type="hidden" name="action" value="insert_test">
+        <button type="submit" style="font-size:14px;padding:8px 16px;cursor:pointer">Insert Test Candidate</button>
+        <span style="margin-left:12px;color:#666">Inserts a row with attorney_id=TEST-001 into pipeline using the first job in jobs table</span>
+    </form>""")
+
+    html.append("</pre></body></html>")
+    return "".join(html)
+
+
+# ---------------------------------------------------------------------------
+# Worklists API
+# ---------------------------------------------------------------------------
+
+@app.route("/api/worklists", methods=["GET"])
+def api_list_worklists():
+    search = request.args.get("search", "")
+    return jsonify(ats_db.list_worklists(search=search))
+
+
+@app.route("/api/worklists", methods=["POST"])
+def api_create_worklist():
+    data = request.get_json() or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name required"}), 400
+    wid = ats_db.create_worklist(
+        name=name,
+        description=data.get("description", ""),
+        color=data.get("color", "#0059FF"),
+        created_by=session.get("user_name", "Admin"),
+    )
+    return jsonify({"ok": True, "id": wid, "worklist": ats_db.get_worklist(wid)}), 201
+
+
+@app.route("/api/worklists/<int:worklist_id>", methods=["GET"])
+def api_get_worklist(worklist_id):
+    wl = ats_db.get_worklist(worklist_id)
+    if not wl:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(wl)
+
+
+@app.route("/api/worklists/<int:worklist_id>", methods=["PUT"])
+def api_update_worklist(worklist_id):
+    data = request.get_json() or {}
+    ats_db.update_worklist(worklist_id, data)
+    return jsonify({"ok": True, "worklist": ats_db.get_worklist(worklist_id)})
+
+
+@app.route("/api/worklists/<int:worklist_id>", methods=["DELETE"])
+def api_delete_worklist(worklist_id):
+    ats_db.delete_worklist(worklist_id)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/worklists/<int:worklist_id>/members", methods=["POST"])
+def api_add_worklist_member(worklist_id):
+    data = request.get_json() or {}
+    attorney_id = str(data.get("attorney_id", "")).strip()
+    if not attorney_id:
+        return jsonify({"error": "attorney_id required"}), 400
+    ok = ats_db.add_worklist_member(
+        worklist_id=worklist_id,
+        attorney_id=attorney_id,
+        attorney_source=data.get("attorney_source", "fp"),
+        attorney_name=data.get("attorney_name", ""),
+        attorney_firm=data.get("attorney_firm", ""),
+        attorney_email=data.get("attorney_email", ""),
+        notes=data.get("notes", ""),
+        added_by=session.get("user_name", "Admin"),
+    )
+    return jsonify({"ok": ok})
+
+
+@app.route("/api/worklists/<int:worklist_id>/members/<attorney_id>", methods=["DELETE"])
+def api_remove_worklist_member(worklist_id, attorney_id):
+    source = request.args.get("source", "fp")
+    ats_db.remove_worklist_member(worklist_id, attorney_id, source)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/worklists/<int:worklist_id>/members/<attorney_id>", methods=["PUT"])
+def api_update_worklist_member(worklist_id, attorney_id):
+    data = request.get_json() or {}
+    source = data.get("attorney_source", request.args.get("source", "fp"))
+    ats_db.update_worklist_member_notes(worklist_id, attorney_id, source, data.get("notes", ""))
+    return jsonify({"ok": True})
+
+
+@app.route("/api/attorneys/<attorney_id>/worklists", methods=["GET"])
+def api_get_attorney_worklists(attorney_id):
+    source = request.args.get("source", "fp")
+    return jsonify(ats_db.get_worklists_for_attorney(attorney_id, source))
+
+
+# ---------------------------------------------------------------------------
+# Tasks API
+# ---------------------------------------------------------------------------
+
+@app.route("/api/tasks", methods=["GET"])
+def api_list_tasks():
+    status = request.args.get("status")
+    priority = request.args.get("priority")
+    due_date = request.args.get("due_date")
+    attorney_id = request.args.get("attorney_id")
+    attorney_source = request.args.get("attorney_source")
+    job_id = request.args.get("job_id", type=int)
+    overdue_only = request.args.get("overdue") == "1"
+    tasks = ats_db.list_tasks(
+        status=status,
+        priority=priority,
+        due_date=due_date,
+        attorney_id=attorney_id,
+        attorney_source=attorney_source,
+        job_id=job_id,
+        overdue_only=overdue_only,
+    )
+    return jsonify(tasks)
+
+
+@app.route("/api/tasks", methods=["POST"])
+def api_create_task():
+    data = request.get_json() or {}
+    title = (data.get("title") or "").strip()
+    if not title:
+        return jsonify({"error": "title required"}), 400
+    data["created_by"] = session.get("user_name", "Admin")
+    task_id = ats_db.create_task(data)
+    return jsonify({"ok": True, "id": task_id, "task": ats_db.get_task(task_id)}), 201
+
+
+@app.route("/api/tasks/<int:task_id>", methods=["GET"])
+def api_get_task(task_id):
+    task = ats_db.get_task(task_id)
+    if not task:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(task)
+
+
+@app.route("/api/tasks/<int:task_id>", methods=["PUT"])
+def api_update_task(task_id):
+    data = request.get_json() or {}
+    ats_db.update_task(task_id, data)
+    return jsonify({"ok": True, "task": ats_db.get_task(task_id)})
+
+
+@app.route("/api/tasks/<int:task_id>", methods=["DELETE"])
+def api_delete_task(task_id):
+    ats_db.delete_task(task_id)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/tasks/<int:task_id>/complete", methods=["PUT"])
+def api_complete_task(task_id):
+    ats_db.complete_task(task_id)
+    return jsonify({"ok": True, "task": ats_db.get_task(task_id)})
+
+
+# ---------------------------------------------------------------------------
+# Dashboard data API
+# ---------------------------------------------------------------------------
+
+@app.route("/api/dashboard/stats", methods=["GET"])
+def api_dashboard_stats():
+    return jsonify(ats_db.get_dashboard_stats())
+
+
+@app.route("/api/dashboard/action-items", methods=["GET"])
+def api_dashboard_action_items():
+    return jsonify(ats_db.get_action_items())
+
+
+@app.route("/api/dashboard/candidates", methods=["GET"])
+def api_dashboard_candidates():
+    return jsonify({"candidates": ats_db.get_dashboard_candidates()})
+
+
+@app.route("/api/dashboard/jobs", methods=["GET"])
+def api_dashboard_jobs():
+    return jsonify({"jobs": ats_db.get_dashboard_jobs()})
+
+
+# ---------------------------------------------------------------------------
+# Quick-search autocomplete endpoints (for task modal fields)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/search/attorneys", methods=["GET"])
+def api_quicksearch_attorneys():
+    """Return up to 10 attorneys matching ?q= (name search across FP + custom)."""
+    q = (request.args.get("q") or "").strip().lower()
+    if not q or len(q) < 2:
+        return jsonify([])
+    results = []
+    # Search FP attorneys DataFrame
+    if ATTORNEYS_DF is not None:
+        import pandas as pd
+        df = ATTORNEYS_DF.copy()
+        name_col = (
+            df.get("first_name", pd.Series("", index=df.index)).fillna("") + " " +
+            df.get("last_name", pd.Series("", index=df.index)).fillna("")
+        ).str.lower()
+        mask = name_col.str.contains(q, regex=False)
+        for _, row in df[mask].head(8).iterrows():
+            name = f"{row.get('first_name', '')} {row.get('last_name', '')}".strip()
+            firm = str(row.get("firm_name", "") or "")
+            gy = row.get("graduationYear", "")
+            gy_str = str(int(gy)) if gy and str(gy).replace(".0","").isdigit() else ""
+            results.append({
+                "id": str(row.get("id", "")),
+                "source": "fp",
+                "name": name,
+                "firm": firm,
+                "graduation_year": gy_str,
+                "practice_areas": str(row.get("practice_areas", "") or ""),
+                "label": name + (" — " + firm if firm else "") + (" (Class of " + gy_str + ")" if gy_str else ""),
+            })
+    # Search custom attorneys
+    custom = ats_db.list_custom_attorneys(search=q)
+    for ca in custom[:5]:
+        name = f"{ca.get('first_name', '')} {ca.get('last_name', '')}".strip()
+        results.append({
+            "id": "custom_" + str(ca["id"]),
+            "source": "custom",
+            "name": name,
+            "firm": ca.get("current_firm", "") or "",
+            "graduation_year": str(ca.get("graduation_year", "") or ""),
+            "label": name + (" — " + ca["current_firm"] if ca.get("current_firm") else "") +
+                     (" (Class of " + str(ca["graduation_year"]) + ")" if ca.get("graduation_year") else ""),
+        })
+    return jsonify(results[:10])
+
+
+@app.route("/api/search/firms", methods=["GET"])
+def api_quicksearch_firms():
+    """Return up to 10 firms matching ?q= (FP + custom)."""
+    q = (request.args.get("q") or "").strip().lower()
+    if not q or len(q) < 2:
+        return jsonify([])
+    results = []
+    # FP firms DataFrame
+    if FIRMS_DF is not None:
+        mask = FIRMS_DF["Name"].fillna("").str.lower().str.contains(q, regex=False)
+        for _, row in FIRMS_DF[mask].head(8).iterrows():
+            name = str(row.get("Name", "") or "")
+            total = row.get("Total Attorneys", "")
+            total_str = str(total).replace(".0", "") if total and str(total) not in ("", "nan") else ""
+            ppp_v = row.get("PPP", "")
+            ppp_s = ""
+            if ppp_v and str(ppp_v) not in ("", "nan", "None"):
+                try:
+                    ppp_num = float(str(ppp_v).replace(",", ""))
+                    ppp_s = f"${ppp_num/1_000_000:.1f}M" if ppp_num >= 1_000_000 else f"${int(ppp_num):,}"
+                except Exception:
+                    ppp_s = str(ppp_v)
+            meta_str = ""
+            if total_str and ppp_s:
+                meta_str = f"{total_str} attorneys · {ppp_s} PPP"
+            elif total_str:
+                meta_str = f"{total_str} attorneys"
+            results.append({
+                "fp_id": str(row.get("FP ID", "")),
+                "source": "fp",
+                "name": name,
+                "total_attorneys": total_str,
+                "meta": meta_str,
+                "label": name + (" — " + total_str + " attorneys" if total_str else ""),
+            })
+    # Custom firms
+    custom = ats_db.list_custom_firms(search=q)
+    for cf in custom[:4]:
+        name = cf.get("name", "")
+        total = cf.get("total_attorneys", "")
+        results.append({
+            "fp_id": None,
+            "custom_id": cf["id"],
+            "source": "custom",
+            "name": name,
+            "total_attorneys": str(total) if total else "",
+            "label": name + (" — " + str(total) + " attorneys" if total else ""),
+        })
+    return jsonify(results[:10])
+
+
+@app.route("/api/search/jobs", methods=["GET"])
+def api_quicksearch_jobs():
+    """Return up to 10 active jobs matching ?q= (ATS + custom)."""
+    q = (request.args.get("q") or "").strip().lower()
+    if not q or len(q) < 2:
+        return jsonify([])
+    results = []
+    # ATS jobs (SQLite)
+    import sqlite3
+    conn = ats_db.get_db()
+    rows = conn.execute(
+        """SELECT j.id, j.title, j.location, e.name as firm_name
+           FROM jobs j LEFT JOIN employers e ON j.employer_id = e.id
+           WHERE j.status = 'Active'
+             AND (LOWER(j.title) LIKE ? OR LOWER(COALESCE(e.name,'')) LIKE ?)
+           LIMIT 8""",
+        (f"%{q}%", f"%{q}%"),
+    ).fetchall()
+    conn.close()
+    for r in rows:
+        label = r["title"]
+        if r["firm_name"]:
+            label += " — " + r["firm_name"]
+        if r["location"]:
+            label += " (" + r["location"] + ")"
+        results.append({
+            "id": r["id"],
+            "source": "ats",
+            "title": r["title"],
+            "firm": r["firm_name"] or "",
+            "location": r["location"] or "",
+            "label": label,
+        })
+    # Custom jobs
+    custom = ats_db.list_custom_jobs(search=q, status="Open")
+    for cj in custom[:4]:
+        label = cj.get("job_title", "")
+        if cj.get("firm_name"):
+            label += " — " + cj["firm_name"]
+        if cj.get("location"):
+            label += " (" + cj["location"] + ")"
+        results.append({
+            "id": "custom_" + str(cj["id"]),
+            "source": "custom",
+            "title": cj.get("job_title", ""),
+            "firm": cj.get("firm_name", "") or "",
+            "location": cj.get("location", "") or "",
+            "label": label,
+        })
+    return jsonify(results[:10])
+
+
+# ---------------------------------------------------------------------------
+# Firm Pitch API endpoints
+# ---------------------------------------------------------------------------
+
+@app.route("/api/firm-pitch/options", methods=["GET"])
+def firm_pitch_options():
+    """Return offices and practice groups for a firm."""
+    firm_name = (request.args.get("firm_name") or "").strip()
+    if not firm_name:
+        return jsonify({"offices": [], "practice_groups": []})
+
+    offices = []
+    practice_groups = []
+
+    if FIRMS_DF is not None and not FIRMS_DF.empty:
+        mask = FIRMS_DF["Name"].fillna("").str.lower() == firm_name.lower()
+        if not mask.any():
+            mask = FIRMS_DF["Name"].fillna("").str.lower().str.contains(
+                firm_name.lower(), regex=False)
+        matches = FIRMS_DF[mask]
+        if not matches.empty:
+            row = matches.iloc[0]
+            offices_raw = str(row.get("Firm Office Locations", "") or "")
+            offices = [o.strip() for o in offices_raw.split(";") if o.strip()]
+            for col in _FP_PRACTICE_COLS:
+                if str(row.get(col, "")).upper() in ("TRUE", "1", "YES"):
+                    practice_groups.append(col)
+
+    return jsonify({"offices": offices, "practice_groups": practice_groups})
+
+
+@app.route("/api/firm-pitch/generate", methods=["POST"])
+def generate_firm_pitch():
+    """Generate a firm pitch PDF document."""
+    try:
+        body = request.get_json(force=True) or {}
+        firm_name = (body.get("firm_name") or "").strip()
+        firm_fp_id = body.get("firm_fp_id")
+        attorney_id = body.get("attorney_id")
+        office = (body.get("office") or "").strip() or None
+        practice_group = (body.get("practice_group") or "").strip() or None
+        custom_prompt = (body.get("custom_prompt") or "").strip()
+        tone = (body.get("tone") or "professional").strip()
+        anonymize = bool(body.get("anonymize_candidate", False))
+        recruiter_info = {
+            "name": body.get("recruiter_name", ""),
+            "title": body.get("recruiter_title", ""),
+            "contact": body.get("recruiter_contact", ""),
+        }
+
+        # Resolve firm name from fp_id if name not provided
+        if not firm_name and firm_fp_id and FIRMS_DF is not None:
+            mask = FIRMS_DF["FP ID"].astype(str) == str(firm_fp_id)
+            if mask.any():
+                firm_name = str(FIRMS_DF[mask].iloc[0]["Name"])
+
+        if not firm_name:
+            return jsonify({"error": "firm_name is required"}), 400
+
+        # Compute all data
+        pitch_data = _compute_firm_pitch_data(firm_name, office, practice_group, attorney_id)
+        matched_firm = pitch_data.get("matched_firm", firm_name)
+
+        # Build charts
+        cand = pitch_data.get("candidate") or {}
+        cand_school = cand.get("law_school", "")
+        cand_firm_str = cand.get("current_firm", "")
+
+        charts = {
+            "hiring_trend": _gen_fp_hiring_trend_chart(
+                pitch_data.get("hires_by_year", {}), matched_firm),
+            "net_growth": _gen_fp_net_growth_chart(
+                pitch_data.get("net_growth", {}), matched_firm),
+            "exit_breakdown": _gen_fp_exit_breakdown_chart(
+                pitch_data.get("dest_breakdown", {}), matched_firm),
+            "inhouse_destinations": _gen_fp_inhouse_destinations_chart(
+                pitch_data.get("inhouse_destinations", []), matched_firm),
+            "team_seniority": _gen_fp_team_seniority_chart(
+                pitch_data.get("team_by_title", {}),
+                f"Team Composition — {matched_firm[:25]}"),
+            "feeder_schools": _generate_feeder_bar_chart(
+                pitch_data.get("feeder_schools", []), cand_school,
+                f"Top Feeder Schools — {matched_firm[:22]}"),
+            "feeder_firms": _generate_feeder_bar_chart(
+                pitch_data.get("feeder_firms", []), cand_firm_str,
+                f"Top Feeder Firms — {matched_firm[:22]}"),
+        }
+        pitch_data["_charts"] = charts
+
+        # Generate narratives via Claude
+        narratives = _generate_firm_pitch_narratives(pitch_data, custom_prompt, tone, anonymize)
+
+        # Assemble PDF
+        pdf_buf = _assemble_firm_pitch_pdf(narratives, pitch_data, recruiter_info, anonymize)
+
+        safe_name = re.sub(r"[^\w\s-]", "", matched_firm).strip().replace(" ", "_")[:40]
+        return send_file(
+            pdf_buf,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=f"Firm_Pitch_{safe_name}.pdf",
+        )
+    except Exception as e:
+        print(f"[Firm pitch generate error] {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+def _run_firm_status_migration():
+    """Auto-detect Active Client firms from jobs/pipeline data on startup."""
+    try:
+        conn = ats_db.get_db()
+        firms_with_jobs = set()
+        for r in conn.execute(
+            "SELECT DISTINCT e.name FROM jobs j JOIN employers e ON j.employer_id = e.id WHERE e.name != ''"
+        ).fetchall():
+            firms_with_jobs.add(r["name"])
+        firms_with_pipeline = set()
+        for r in conn.execute(
+            """SELECT DISTINCT e.name FROM pipeline p
+               JOIN jobs j ON p.job_id = j.id
+               JOIN employers e ON j.employer_id = e.id
+               WHERE e.name != ''"""
+        ).fetchall():
+            firms_with_pipeline.add(r["name"])
+        conn.close()
+        ats_db.migrate_firm_statuses_from_activity(firms_with_jobs, firms_with_pipeline)
+        print(f"[Firm migration] Auto-detected {len(firms_with_jobs | firms_with_pipeline)} active client firms.")
+    except Exception as e:
+        print(f"[Firm migration error] {e}")
+
+
+# ===========================================================================
+# Admin — Feature Catalog
+# ===========================================================================
+
+@app.route("/admin")
+def admin_catalog():
+    """Internal feature catalog — requires login."""
+    if not session.get("user_id"):
+        return redirect("/")
+    from datetime import date
+    today = date.today().strftime("%B %d, %Y")
+    return render_template("admin.html", today=today, user_name=session.get("user_name", "Admin"))
+
+
 if __name__ == "__main__":
     print(f"Loaded {len(ATTORNEYS_DF)} attorneys, {len(HIRING_DF)} hiring records, {len(JOBS_DF)} jobs, {len(FIRMS_DF)} firms.")
     print(f"Hiring DNA computed for {len(HIRING_DNA)} firms. Pre-computing top candidates in background...")
+    _run_firm_status_migration()
     threading.Thread(target=_precompute_top_candidates, daemon=True).start()
-    app.run(debug=True, port=5000)
+    app.run(debug=True, use_reloader=False, host='0.0.0.0', port=5000)

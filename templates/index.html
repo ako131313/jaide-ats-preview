@@ -41,6 +41,14 @@
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/><path d="M9 9h1M9 13h1M9 17h1"/></svg>
                 Firms
             </button>
+            <button class="nav-tab" data-view="pipeline">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+                Pipeline
+            </button>
+            <button class="nav-tab" data-view="email">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></svg>
+                Email
+            </button>
         </nav>
         <div class="nav-right">
             <button class="nav-gear" id="btn-settings" title="Settings">
@@ -60,6 +68,10 @@
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
                         Settings
                     </button>
+                    <a href="/admin" class="avatar-dropdown-item" style="text-decoration:none;color:inherit">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                        Feature Catalog
+                    </a>
                     <button class="avatar-dropdown-item avatar-dropdown-signout" id="btn-logout">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
                         Sign Out
@@ -140,6 +152,12 @@
                             <span class="results-mode-badge" id="results-mode-badge"></span>
                         </div>
                         <div class="results-header-right">
+                            <div class="source-filter" id="atty-source-filter">
+                                <button class="source-filter-btn active" data-src="all">All</button>
+                                <button class="source-filter-btn" data-src="fp">FP</button>
+                                <button class="source-filter-btn" data-src="custom">My Data</button>
+                            </div>
+                            <button class="btn-secondary btn-sm" id="btn-add-custom-attorney">+ Add Candidate</button>
                             <button class="btn-save-job" id="btn-save-job" style="display:none">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
                                 Save as Job
@@ -178,6 +196,12 @@
                             <span class="job-results-count" id="job-results-count"></span>
                         </div>
                         <div class="results-header-right">
+                            <div class="source-filter" id="job-source-filter">
+                                <button class="source-filter-btn active" data-src="all">All</button>
+                                <button class="source-filter-btn" data-src="fp">FP</button>
+                                <button class="source-filter-btn" data-src="custom">My Data</button>
+                            </div>
+                            <button class="btn-secondary btn-sm" id="btn-add-custom-job">+ Add Job</button>
                             <select id="job-filter-status-search" class="filter-select">
                                 <option value="">All Status</option>
                                 <option value="Open" selected>Open</option>
@@ -193,16 +217,6 @@
                     <div class="job-results-grid" id="job-results-grid"></div>
                 </div>
 
-                <!-- Sent Emails View -->
-                <div class="sent-emails-view" id="sent-emails-view" style="display:none">
-                    <div class="results-header">
-                        <div class="results-header-left">
-                            <button class="btn-back" id="btn-sent-back">&larr; Back</button>
-                            <h2 class="results-title">Sent Emails</h2>
-                        </div>
-                    </div>
-                    <div id="sent-emails-table"></div>
-                </div>
 
                 <!-- ATS: Employers View -->
                 <div class="ats-view" id="employers-view" style="display:none">
@@ -281,78 +295,128 @@
         </div>
 
         <!-- ========== DASHBOARD VIEW ========== -->
+        <!-- ── Dashboard Command Center ── -->
         <div id="view-dashboard" class="view view-active">
             <div class="dashboard-content">
-                <!-- Metric Cards -->
-                <div class="dashboard-metrics" id="dashboard-metrics">
-                    <div class="metric-card">
-                        <div class="metric-icon metric-icon-jobs">
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
-                        </div>
-                        <div class="metric-info">
-                            <div class="metric-value" id="metric-active-jobs">0</div>
-                            <div class="metric-label">Active Jobs</div>
-                        </div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-icon metric-icon-pipeline">
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-                        </div>
-                        <div class="metric-info">
-                            <div class="metric-value" id="metric-pipeline">0</div>
-                            <div class="metric-label">Pipeline Candidates</div>
-                        </div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-icon metric-icon-interviews">
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-                        </div>
-                        <div class="metric-info">
-                            <div class="metric-value" id="metric-interviews">0</div>
-                            <div class="metric-label">Interviews</div>
-                        </div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-icon metric-icon-placements">
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                        </div>
-                        <div class="metric-info">
-                            <div class="metric-value" id="metric-placements">0</div>
-                            <div class="metric-label">Placements</div>
-                        </div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-icon metric-icon-value">
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-                        </div>
-                        <div class="metric-info">
-                            <div class="metric-value" id="metric-pipeline-value">$0</div>
-                            <div class="metric-label">Pipeline Value</div>
-                        </div>
-                    </div>
-                </div>
 
-                <!-- Quick Actions -->
-                <div class="dashboard-actions">
-                    <button class="dash-action-btn dash-action-primary" id="dash-add-candidate">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="17" y1="11" x2="23" y2="11"/></svg>
-                        Add to Pipeline
+                <!-- Row 0: Quick Actions Bar -->
+                <div class="dash-quick-bar">
+                    <button class="dash-quick-btn dash-quick-primary" id="dash-btn-add-candidate">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="17" y1="11" x2="23" y2="11"/></svg>
+                        Add Candidate
                     </button>
-                    <button class="dash-action-btn" id="dash-manage-jobs">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
+                    <button class="dash-quick-btn" id="dash-btn-add-job">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+                        Add Job
+                    </button>
+                    <button class="dash-quick-btn" id="dash-btn-add-firm">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>
+                        Add Firm
+                    </button>
+                    <button class="dash-quick-btn" id="dash-btn-new-task">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4"/></svg>
+                        New Task
+                    </button>
+                    <button class="dash-quick-btn" id="dash-btn-new-worklist">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                        New Worklist
+                    </button>
+                    <div class="dash-quick-spacer"></div>
+                    <button class="dash-quick-btn dash-quick-secondary" id="dash-manage-jobs">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
                         Manage Jobs
                     </button>
-                    <button class="dash-action-btn" id="dash-manage-employers">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>
+                    <button class="dash-quick-btn dash-quick-secondary" id="dash-manage-employers">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>
                         Manage Employers
                     </button>
-                    <button class="dash-action-btn" id="dash-sent-emails">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></svg>
+                    <button class="dash-quick-btn dash-quick-secondary" id="dash-sent-emails">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></svg>
                         Sent Emails
                     </button>
                 </div>
 
-                <!-- Pipeline Board -->
+                <!-- Row 1: Unified Action Items + My Worklists -->
+                <div class="dash-row-2col" style="margin-bottom:16px">
+                    <div class="dash-panel dash-panel-60" style="padding:0;overflow:hidden">
+                        <div class="dash-panel-header" style="padding:14px 18px 12px">
+                            <div style="display:flex;align-items:center;gap:8px">
+                                <h2 class="section-title">Action Items</h2>
+                                <span id="dash-action-items-count" class="dash-badge-count"></span>
+                            </div>
+                            <button class="btn-primary btn-sm" id="dash-btn-new-task-2">+ New Task</button>
+                        </div>
+                        <div id="dash-action-items" class="ai-list">
+                            <div class="dash-loading" style="padding:20px">Loading…</div>
+                        </div>
+                    </div>
+                    <div class="dash-panel dash-panel-40">
+                        <div class="dash-panel-header">
+                            <h2 class="section-title">My Worklists</h2>
+                            <button class="btn-secondary btn-sm" id="dash-view-all-worklists">New Worklist</button>
+                        </div>
+                        <div id="dash-worklists-list" class="dash-worklists-grid">
+                            <div class="dash-loading">Loading…</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Row 2: My Candidates -->
+                <div class="dash-panel dash-full" style="margin-bottom:16px">
+                    <div class="dash-panel-header">
+                        <h2 class="section-title">My Candidates</h2>
+                        <div class="my-cand-filters" id="my-cand-filters">
+                            <button class="stage-filter-pill active" data-stage="">All Stages</button>
+                            <button class="stage-filter-pill" data-stage="early">Early</button>
+                            <button class="stage-filter-pill" data-stage="interview">Interview</button>
+                            <button class="stage-filter-pill" data-stage="offer">Offer / Placed</button>
+                            <button class="stage-filter-pill" data-stage="rejected">Rejected / Withdrawn</button>
+                        </div>
+                        <a class="btn-link" id="dash-view-all-pipeline" href="#">View All in Pipeline →</a>
+                    </div>
+                    <div id="dash-my-candidates">
+                        <div class="dash-loading">Loading…</div>
+                    </div>
+                </div>
+
+                <!-- Row 3: My Active Jobs -->
+                <div class="dash-panel dash-full" style="margin-bottom:16px">
+                    <div class="dash-panel-header">
+                        <h2 class="section-title">My Active Jobs</h2>
+                        <div class="my-cand-filters" id="my-jobs-filters">
+                            <button class="stage-filter-pill active" data-status="">All</button>
+                            <button class="stage-filter-pill" data-status="Active">Active</button>
+                            <button class="stage-filter-pill" data-status="On Hold">On Hold</button>
+                            <button class="stage-filter-pill" data-status="Closed">Closed</button>
+                        </div>
+                    </div>
+                    <div id="dash-my-jobs">
+                        <div class="dash-loading">Loading…</div>
+                    </div>
+                </div>
+
+                <!-- Row 4: Recent Activity -->
+                <div class="dashboard-section">
+                    <h2 class="section-title">Recent Activity</h2>
+                    <div id="activity-feed"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Pipeline View (Kanban) ── -->
+        <div id="view-pipeline" class="view">
+            <div class="dashboard-content">
+
+                <!-- Context Bar (job-aware) -->
+                <div class="pipeline-ctx-bar" id="pipeline-context-bar">
+                    <div class="ctx-loading">Loading…</div>
+                </div>
+
+                <!-- Funnel Bar -->
+                <div class="pipeline-funnel-wrap">
+                    <div id="pipeline-funnel-bar"></div>
+                </div>
+
                 <div class="dashboard-section">
                     <div class="pipeline-header">
                         <div class="pipeline-header-left">
@@ -388,33 +452,197 @@
                         </button>
                     </div>
                 </div>
-
-                <!-- Recent Activity -->
-                <div class="dashboard-section">
-                    <h2 class="section-title">Recent Activity</h2>
-                    <div id="activity-feed"></div>
-                </div>
             </div>
         </div>
 
         <!-- ========== FIRMS VIEW ========== -->
         <div id="view-firms" class="view">
             <div class="firms-content">
-                <div class="firms-header">
-                    <div class="firms-header-left">
-                        <h2 class="section-title">Firms</h2>
-                        <span class="firms-count" id="firms-count"></span>
+
+                <!-- List View (My Clients + Database) -->
+                <div id="firms-list-view">
+
+                    <!-- ── My Clients Section ── -->
+                    <div class="firms-section" id="my-clients-section">
+                        <div class="firms-section-hd">
+                            <div class="firms-section-hd-left">
+                                <h2 class="firms-section-title">My Clients</h2>
+                                <span class="firms-badge" id="my-clients-count"></span>
+                            </div>
+                            <div class="firms-section-hd-right">
+                                <select class="firms-sort-sel" id="my-clients-sort">
+                                    <option value="activity">Most Recent Activity</option>
+                                    <option value="name">Name A–Z</option>
+                                    <option value="jobs">Active Jobs</option>
+                                    <option value="pipeline">Pipeline Size</option>
+                                    <option value="followup">Next Follow-up</option>
+                                    <option value="priority">Priority</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="my-clients-list">
+                            <div class="firms-loading" id="my-clients-loading">Loading…</div>
+                        </div>
                     </div>
-                    <div class="firms-header-right">
-                        <button class="btn-ai-search" id="btn-ai-firm-search" title="Toggle AI-powered search">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a4 4 0 014 4c0 1.95-1.4 3.58-3.25 3.93L12 22l-.75-12.07A4.001 4.001 0 0112 2z"/><circle cx="12" cy="6" r="1" fill="currentColor"/></svg>
-                            AI
-                        </button>
-                        <input type="text" class="table-search firms-search" id="firms-search" placeholder="Search firms...">
+
+                    <!-- ── Recently Viewed ── -->
+                    <div class="recently-viewed-bar" id="recently-viewed-bar" style="display:none">
+                        <span class="rv-label">Recently Viewed:</span>
+                        <span id="recently-viewed-links"></span>
+                    </div>
+
+                    <!-- ── Firm Database Section ── -->
+                    <div class="firms-section" id="firms-db-section">
+                        <div class="firms-section-hd">
+                            <div class="firms-section-hd-left">
+                                <h2 class="firms-section-title">Firm Database</h2>
+                                <span class="firms-badge" id="firms-count"></span>
+                            </div>
+                            <div class="firms-section-hd-right">
+                                <div class="source-filter" id="firms-source-filter">
+                                    <button class="source-filter-btn active" data-src="all">All</button>
+                                    <button class="source-filter-btn" data-src="fp">FP</button>
+                                    <button class="source-filter-btn" data-src="custom">My Data</button>
+                                </div>
+                                <button class="btn-secondary btn-sm" id="btn-add-custom-firm">+ Add Firm</button>
+                                <button class="btn-ai-search" id="btn-ai-firm-search" title="AI Search">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a4 4 0 014 4c0 1.95-1.4 3.58-3.25 3.93L12 22l-.75-12.07A4.001 4.001 0 0112 2z"/><circle cx="12" cy="6" r="1" fill="currentColor"/></svg>
+                                    AI
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Search bar -->
+                        <div class="firms-search-row">
+                            <div class="firms-search-wrap">
+                                <svg class="firms-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                                <input type="text" class="firms-search-input" id="firms-search" placeholder="Search firms by name, location, or practice area…">
+                                <button class="firms-search-clear" id="firms-search-clear" style="display:none" title="Clear">✕</button>
+                            </div>
+                        </div>
+
+                        <!-- Filter bar -->
+                        <div class="firms-filter-bar" id="firms-filter-bar">
+                            <div class="firms-filter-group">
+                                <label class="firms-filter-label">Status</label>
+                                <select class="firms-filter-sel" id="filter-status">
+                                    <option value="">All Statuses</option>
+                                    <option value="Active Client">Active Client</option>
+                                    <option value="Prospect">Prospect</option>
+                                    <option value="Past Client">Past Client</option>
+                                    <option value="Reference Only">Reference Only</option>
+                                </select>
+                            </div>
+                            <div class="firms-filter-group">
+                                <label class="firms-filter-label">Size</label>
+                                <select class="firms-filter-sel" id="filter-size">
+                                    <option value="">Any Size</option>
+                                    <option value="1000+">1,000+ attorneys</option>
+                                    <option value="500-999">500–999</option>
+                                    <option value="100-499">100–499</option>
+                                    <option value="under100">Under 100</option>
+                                </select>
+                            </div>
+                            <div class="firms-filter-group">
+                                <label class="firms-filter-label">Practice Area</label>
+                                <select class="firms-filter-sel" id="filter-practice">
+                                    <option value="">All Areas</option>
+                                </select>
+                            </div>
+                            <div class="firms-filter-group">
+                                <label class="firms-filter-label">Activity</label>
+                                <select class="firms-filter-sel" id="filter-activity">
+                                    <option value="">All</option>
+                                    <option value="has_jobs">Has Active Jobs</option>
+                                    <option value="has_pipeline">Has Pipeline</option>
+                                    <option value="active">Has Activity</option>
+                                </select>
+                            </div>
+                            <button class="firms-filter-reset" id="firms-filter-reset" style="display:none">Clear Filters</button>
+                        </div>
+
+                        <!-- Table -->
+                        <div class="firms-table-wrap">
+                            <table class="firms-table" id="firms-table">
+                                <thead>
+                                    <tr>
+                                        <th class="firms-th" data-col="name">Firm Name <span class="sort-arrow"></span></th>
+                                        <th class="firms-th" data-col="client_status">Status <span class="sort-arrow"></span></th>
+                                        <th class="firms-th" data-col="total_attorneys">Size <span class="sort-arrow"></span></th>
+                                        <th class="firms-th" data-col="ppp">PPP <span class="sort-arrow"></span></th>
+                                        <th class="firms-th firms-th-nosort">Offices</th>
+                                        <th class="firms-th firms-th-nosort">Top Practice Areas</th>
+                                        <th class="firms-th" data-col="active_jobs">Jobs <span class="sort-arrow"></span></th>
+                                        <th class="firms-th" data-col="pipeline">Pipeline <span class="sort-arrow"></span></th>
+                                        <th class="firms-th firms-th-nosort">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="firms-table-body"></tbody>
+                            </table>
+                            <div class="firms-table-empty" id="firms-table-empty" style="display:none">No firms match your search.</div>
+                        </div>
+
+                        <!-- Pagination -->
+                        <div class="firms-pagination" id="firms-pagination"></div>
                     </div>
                 </div>
-                <div class="firms-grid" id="firms-grid"></div>
+
+                <!-- Firm Detail View -->
                 <div class="firm-detail" id="firm-detail" style="display:none"></div>
+
+            </div>
+        </div>
+
+        <!-- ========== EMAIL HUB VIEW ========== -->
+        <div id="view-email" class="view">
+            <div class="email-hub-wrap">
+                <!-- Header -->
+                <div class="email-hub-header">
+                    <div class="email-hub-header-left">
+                        <h2 class="results-title">Email Activity</h2>
+                    </div>
+                    <div class="email-hub-header-right">
+                        <button class="btn-secondary btn-sm" id="btn-email-settings">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93A10 10 0 0 0 4.93 19.07M4.93 4.93a10 10 0 0 0 14.14 14.14"/></svg>
+                            Email Settings
+                        </button>
+                    </div>
+                </div>
+                <!-- Nylas banner (dismissable) -->
+                <div class="nylas-banner hub-nylas-banner" id="nylas-banner">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                    <span><strong>Open &amp; Click tracking coming soon.</strong> Connect Nylas to automatically track email opens, link clicks, and replies. Fields marked — will populate once connected.</span>
+                    <button class="hub-banner-dismiss" id="nylas-banner-dismiss" title="Dismiss">&times;</button>
+                </div>
+                <!-- Status tabs -->
+                <div class="hub-tabs">
+                    <button class="hub-tab active" data-status="">All Emails</button>
+                    <button class="hub-tab" data-status="sent">Sent</button>
+                    <button class="hub-tab" data-status="scheduled">Scheduled <span class="hub-tab-badge">Soon</span></button>
+                    <button class="hub-tab" data-status="draft">Drafts <span class="hub-tab-badge">Soon</span></button>
+                </div>
+                <!-- Stats bar -->
+                <div class="hub-stats-bar" id="hub-stats-bar"></div>
+                <!-- Filter bar -->
+                <div class="hub-filter-bar">
+                    <input type="text" class="table-search" id="hub-filter-q" placeholder="Search subject, candidate, email...">
+                    <select class="filter-select" id="hub-filter-days">
+                        <option value="">All Time</option>
+                        <option value="7">Last 7 days</option>
+                        <option value="30">Last 30 days</option>
+                        <option value="90">Last 90 days</option>
+                    </select>
+                    <select class="filter-select" id="hub-filter-status">
+                        <option value="">All Status</option>
+                        <option value="sent">Sent</option>
+                        <option value="failed">Failed</option>
+                        <option value="skipped">Skipped</option>
+                    </select>
+                </div>
+                <!-- Table area (list view) -->
+                <div id="hub-table-area"></div>
+                <!-- Detail view (hidden until row clicked) -->
+                <div id="hub-detail-area" style="display:none"></div>
             </div>
         </div>
 
@@ -921,14 +1149,688 @@
         <div class="compare-results-body" id="compare-results-body"></div>
     </div>
 
+    <!-- ===== Custom Attorney Modal ===== -->
+    <div class="modal-overlay" id="custom-attorney-modal-overlay">
+        <div class="modal-card modal-wide">
+            <button class="modal-close" id="custom-attorney-modal-close">&times;</button>
+            <h2 class="modal-title" id="custom-attorney-modal-title">Add Candidate</h2>
+            <div class="modal-tabs">
+                <button class="modal-tab-btn active" data-tab="ca-basic">Basic Info</button>
+                <button class="modal-tab-btn" data-tab="ca-professional">Professional</button>
+                <button class="modal-tab-btn" data-tab="ca-background">Background</button>
+                <button class="modal-tab-btn" data-tab="ca-source">Source &amp; Tags</button>
+            </div>
+            <form id="custom-attorney-form" autocomplete="off">
+                <input type="hidden" id="custom-attorney-id">
+
+                <!-- Basic Info Tab -->
+                <div class="modal-tab-panel active" id="ca-basic">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>First Name *</label>
+                            <input type="text" id="ca-first-name" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Last Name *</label>
+                            <input type="text" id="ca-last-name" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="ca-email">
+                        </div>
+                        <div class="form-group">
+                            <label>Phone</label>
+                            <input type="text" id="ca-phone">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Current Firm</label>
+                        <input type="text" id="ca-current-firm" list="ca-firm-datalist">
+                        <datalist id="ca-firm-datalist"></datalist>
+                    </div>
+                    <div class="form-group">
+                        <label>Title</label>
+                        <select id="ca-title">
+                            <option value="">— Select —</option>
+                            <option>Associate</option>
+                            <option>Senior Associate</option>
+                            <option>Counsel</option>
+                            <option>Senior Counsel</option>
+                            <option>Of Counsel</option>
+                            <option>Partner</option>
+                            <option>Senior Partner</option>
+                            <option>Managing Partner</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>City</label>
+                            <input type="text" id="ca-location-city">
+                        </div>
+                        <div class="form-group">
+                            <label>State</label>
+                            <input type="text" id="ca-location-state">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Gender</label>
+                            <select id="ca-gender">
+                                <option value="">— Not specified —</option>
+                                <option>Male</option>
+                                <option>Female</option>
+                                <option>Non-binary</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Diverse</label>
+                            <select id="ca-diverse">
+                                <option value="">— Not specified —</option>
+                                <option value="Yes">Yes</option>
+                                <option value="No">No</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Professional Tab -->
+                <div class="modal-tab-panel" id="ca-professional">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Graduation Year</label>
+                            <input type="number" id="ca-graduation-year" placeholder="2019">
+                        </div>
+                        <div class="form-group">
+                            <label>Law School</label>
+                            <input type="text" id="ca-law-school" list="ca-lawschool-datalist">
+                            <datalist id="ca-lawschool-datalist">
+                                <option>Harvard Law School</option>
+                                <option>Yale Law School</option>
+                                <option>Columbia Law School</option>
+                                <option>NYU School of Law</option>
+                                <option>University of Chicago Law School</option>
+                                <option>Stanford Law School</option>
+                                <option>Georgetown University Law Center</option>
+                                <option>University of Pennsylvania Carey Law School</option>
+                                <option>University of Virginia School of Law</option>
+                                <option>University of Michigan Law School</option>
+                                <option>Duke University School of Law</option>
+                                <option>Northwestern Pritzker School of Law</option>
+                            </datalist>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Undergraduate</label>
+                        <input type="text" id="ca-undergraduate">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>LLM School</label>
+                            <input type="text" id="ca-llm-school">
+                        </div>
+                        <div class="form-group">
+                            <label>LLM Specialty</label>
+                            <input type="text" id="ca-llm-specialty">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Bar Admissions</label>
+                        <input type="text" id="ca-bar-admissions" placeholder="e.g. New York, California">
+                    </div>
+                    <div class="form-group">
+                        <label>Practice Areas</label>
+                        <input type="text" id="ca-practice-areas" placeholder="e.g. Corporate, M&amp;A">
+                    </div>
+                    <div class="form-group">
+                        <label>Specialty</label>
+                        <input type="text" id="ca-specialty" placeholder="e.g. Fund Formation">
+                    </div>
+                    <div class="form-group">
+                        <label>LinkedIn URL</label>
+                        <input type="url" id="ca-linkedin-url" placeholder="https://linkedin.com/in/...">
+                    </div>
+                </div>
+
+                <!-- Background Tab -->
+                <div class="modal-tab-panel" id="ca-background">
+                    <div class="form-group">
+                        <label>Bio / Summary</label>
+                        <textarea id="ca-bio" rows="4" placeholder="Brief bio or professional summary..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Prior Experience / Prior Firms</label>
+                        <textarea id="ca-prior-experience" rows="3" placeholder="e.g. Skadden (2015–2018), Sullivan &amp; Cromwell (2018–2021)"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Clerkships</label>
+                        <input type="text" id="ca-clerkships" placeholder="e.g. Hon. Jane Doe, SDNY (2017)">
+                    </div>
+                    <div class="form-group">
+                        <label>Languages</label>
+                        <input type="text" id="ca-languages" placeholder="e.g. Spanish, Mandarin">
+                    </div>
+                </div>
+
+                <!-- Source & Tags Tab -->
+                <div class="modal-tab-panel" id="ca-source">
+                    <div class="form-group">
+                        <label>Source Notes</label>
+                        <textarea id="ca-source-notes" rows="3" placeholder="Where did you find this candidate? Conference, referral, etc."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Tags <span class="form-optional">(comma-separated)</span></label>
+                        <input type="text" id="ca-tags" placeholder="e.g. Priority, Hot Candidate, Referred">
+                    </div>
+                    <div class="form-group">
+                        <label>Resume (PDF)</label>
+                        <input type="file" id="ca-resume" accept=".pdf">
+                    </div>
+                </div>
+
+                <div class="form-actions" style="margin-top:20px">
+                    <button type="button" class="btn-secondary" id="custom-attorney-cancel">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Candidate</button>
+                </div>
+                <div class="form-status" id="custom-attorney-status"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ===== Custom Job Modal ===== -->
+    <div class="modal-overlay" id="custom-job-modal-overlay">
+        <div class="modal-card modal-composer">
+            <button class="modal-close" id="custom-job-modal-close">&times;</button>
+            <h2 class="modal-title" id="custom-job-modal-title">Add Job</h2>
+            <form id="custom-job-form" autocomplete="off">
+                <input type="hidden" id="custom-job-id">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Firm Name *</label>
+                        <input type="text" id="cj-firm-name" list="cj-firm-datalist" required>
+                        <datalist id="cj-firm-datalist"></datalist>
+                    </div>
+                    <div class="form-group">
+                        <label>Job Title *</label>
+                        <input type="text" id="cj-job-title" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Job Description</label>
+                    <textarea id="cj-job-description" rows="4" placeholder="Paste or describe the role..."></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Location</label>
+                        <input type="text" id="cj-location" placeholder="New York, NY">
+                    </div>
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select id="cj-status">
+                            <option value="Open">Open</option>
+                            <option value="On Hold">On Hold</option>
+                            <option value="Closed">Closed</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Practice Areas</label>
+                        <input type="text" id="cj-practice-areas" placeholder="Corporate, M&amp;A">
+                    </div>
+                    <div class="form-group">
+                        <label>Specialty</label>
+                        <input type="text" id="cj-specialty" placeholder="Fund Formation">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Min Years Exp</label>
+                        <input type="number" id="cj-min-years" min="0" max="40">
+                    </div>
+                    <div class="form-group">
+                        <label>Max Years Exp</label>
+                        <input type="number" id="cj-max-years" min="0" max="40">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Salary Min</label>
+                        <input type="number" id="cj-salary-min" placeholder="200000">
+                    </div>
+                    <div class="form-group">
+                        <label>Salary Max</label>
+                        <input type="number" id="cj-salary-max" placeholder="350000">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Bar Required</label>
+                        <input type="text" id="cj-bar-required" placeholder="New York">
+                    </div>
+                    <div class="form-group" style="display:flex;align-items:center;gap:8px;padding-top:22px">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="cj-confidential"> Confidential
+                        </label>
+                    </div>
+                </div>
+                <hr class="form-divider">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Contact Name</label>
+                        <input type="text" id="cj-contact-name">
+                    </div>
+                    <div class="form-group">
+                        <label>Contact Email</label>
+                        <input type="email" id="cj-contact-email">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Contact Phone</label>
+                    <input type="text" id="cj-contact-phone">
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="cj-notes" rows="3"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" id="custom-job-cancel">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Job</button>
+                </div>
+                <div class="form-status" id="custom-job-status"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ===== Custom Firm Modal ===== -->
+    <div class="modal-overlay" id="custom-firm-modal-overlay">
+        <div class="modal-card modal-composer">
+            <button class="modal-close" id="custom-firm-modal-close">&times;</button>
+            <h2 class="modal-title" id="custom-firm-modal-title">Add Firm</h2>
+            <form id="custom-firm-form" autocomplete="off">
+                <input type="hidden" id="custom-firm-id">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Firm Name *</label>
+                        <input type="text" id="cf-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Website</label>
+                        <input type="text" id="cf-website" placeholder="https://...">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Total Attorneys</label>
+                        <input type="number" id="cf-total-attorneys" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Partners</label>
+                        <input type="number" id="cf-partners" min="0">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Counsel</label>
+                        <input type="number" id="cf-counsel" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Associates</label>
+                        <input type="number" id="cf-associates" min="0">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Office Locations <span class="form-optional">(comma-separated)</span></label>
+                    <textarea id="cf-office-locations" rows="2" placeholder="New York, Chicago, Los Angeles"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Practice Areas</label>
+                    <textarea id="cf-practice-areas" rows="2" placeholder="Corporate, Litigation, Real Estate"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>PPP ($)</label>
+                        <input type="number" id="cf-ppp" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Vault Ranking</label>
+                        <input type="number" id="cf-vault-ranking" min="0">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Firm Type</label>
+                    <select id="cf-firm-type">
+                        <option value="">— Select —</option>
+                        <option>AmLaw 100</option>
+                        <option>AmLaw 200</option>
+                        <option>Mid-Size</option>
+                        <option>Boutique</option>
+                        <option>Regional</option>
+                        <option>In-House</option>
+                        <option>Government</option>
+                        <option>Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="cf-notes" rows="3"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" id="custom-firm-cancel">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Firm</button>
+                </div>
+                <div class="form-status" id="custom-firm-status"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tags Popover (shared singleton) -->
+    <div class="tags-popover" id="tags-popover" style="display:none">
+        <div class="tags-popover-title">Tags</div>
+        <div class="tags-list" id="tags-popover-list"></div>
+        <div class="tags-input-row">
+            <input type="text" id="tags-popover-input" placeholder="Add tag..." maxlength="40">
+            <button class="btn-primary btn-sm" id="tags-popover-add">Add</button>
+        </div>
+    </div>
+
     <!-- Toast notification -->
     <div class="toast-container" id="toast-container"></div>
 
-    <script src="/static/script.js?v=4"></script>
-    <script src="/static/ats.js?v=4"></script>
-    <script src="/static/jobsearch.js?v=3"></script>
-    <script src="/static/firms.js?v=3"></script>
-    <script src="/static/compare.js?v=1"></script>
+    <!-- ── Task Create/Edit Modal ── -->
+    <div class="modal-overlay" id="task-modal-overlay">
+        <div class="modal-card modal-composer">
+            <button class="modal-close" id="task-modal-close">&times;</button>
+            <h2 class="modal-title" id="task-modal-title">New Task</h2>
+            <form id="task-form" autocomplete="off">
+                <input type="hidden" id="task-id">
+                <div class="form-group">
+                    <label>Title *</label>
+                    <input type="text" id="task-title" required placeholder="e.g., Call John Smith re: Senior Associate role">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Type</label>
+                        <select id="task-type">
+                            <option>General</option>
+                            <option>Call</option>
+                            <option>Email</option>
+                            <option>Follow Up</option>
+                            <option>Submit Candidates</option>
+                            <option>Send Agreement</option>
+                            <option>Schedule Interview</option>
+                            <option>Check References</option>
+                            <option>Extend Offer</option>
+                            <option>Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Priority</label>
+                        <select id="task-priority">
+                            <option>High</option>
+                            <option selected>Medium</option>
+                            <option>Low</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Due Date</label>
+                        <input type="date" id="task-due-date">
+                    </div>
+                    <div class="form-group">
+                        <label>Due Time</label>
+                        <input type="time" id="task-due-time">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Description / Notes</label>
+                    <textarea id="task-description" rows="3" placeholder="Optional details..."></textarea>
+                </div>
+                <!-- Linked Attorney autocomplete -->
+                <div class="form-group">
+                    <label>Linked Attorney</label>
+                    <div class="ac-field" id="task-attorney-field">
+                        <div class="ac-pill" id="task-attorney-pill" style="display:none">
+                            <span id="task-attorney-pill-label"></span>
+                            <button type="button" class="ac-pill-clear" id="task-attorney-clear">&times;</button>
+                        </div>
+                        <input type="text" class="ac-input" id="task-attorney-input" placeholder="Search by name…" autocomplete="off">
+                        <div class="ac-dropdown" id="task-attorney-dropdown" style="display:none"></div>
+                    </div>
+                    <input type="hidden" id="task-attorney-id">
+                    <input type="hidden" id="task-attorney-source">
+                    <input type="hidden" id="task-attorney-name">
+                </div>
+                <!-- Linked Job autocomplete -->
+                <div class="form-group">
+                    <label>Linked Job</label>
+                    <div class="ac-field" id="task-job-field">
+                        <div class="ac-pill" id="task-job-pill" style="display:none">
+                            <span id="task-job-pill-label"></span>
+                            <button type="button" class="ac-pill-clear" id="task-job-clear">&times;</button>
+                        </div>
+                        <input type="text" class="ac-input" id="task-job-input" placeholder="Search by title or firm…" autocomplete="off">
+                        <div class="ac-dropdown" id="task-job-dropdown" style="display:none"></div>
+                    </div>
+                    <input type="hidden" id="task-job-id">
+                    <input type="hidden" id="task-job-title">
+                </div>
+                <!-- Linked Firm autocomplete -->
+                <div class="form-group">
+                    <label>Linked Firm <span style="color:#aaa;font-weight:400;font-size:11px">(if no job linked)</span></label>
+                    <div class="ac-field" id="task-firm-field">
+                        <div class="ac-pill" id="task-firm-pill" style="display:none">
+                            <span id="task-firm-pill-label"></span>
+                            <button type="button" class="ac-pill-clear" id="task-firm-clear">&times;</button>
+                        </div>
+                        <input type="text" class="ac-input" id="task-firm-input" placeholder="Search by firm name…" autocomplete="off">
+                        <div class="ac-dropdown" id="task-firm-dropdown" style="display:none"></div>
+                    </div>
+                    <input type="hidden" id="task-firm-name">
+                    <input type="hidden" id="task-firm-fp-id">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary" id="task-modal-cancel">Cancel</button>
+                    <button type="submit" class="btn-primary" id="task-modal-save">Save Task</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ── Worklist Create/Edit Modal ── -->
+    <div class="modal-overlay" id="worklist-modal-overlay">
+        <div class="modal-card modal-composer">
+            <button class="modal-close" id="worklist-modal-close">&times;</button>
+            <h2 class="modal-title" id="worklist-modal-title">New Worklist</h2>
+            <form id="worklist-form" autocomplete="off">
+                <input type="hidden" id="worklist-id">
+                <div class="form-group">
+                    <label>Name *</label>
+                    <input type="text" id="worklist-name" required placeholder="e.g., M&A Associates – Q2 Targets">
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="worklist-description" rows="2" placeholder="Optional description..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Color</label>
+                    <div class="worklist-color-picker" id="worklist-color-picker">
+                        <button type="button" class="wl-color-swatch active" data-color="#0059FF" style="background:#0059FF"></button>
+                        <button type="button" class="wl-color-swatch" data-color="#7C3AED" style="background:#7C3AED"></button>
+                        <button type="button" class="wl-color-swatch" data-color="#059669" style="background:#059669"></button>
+                        <button type="button" class="wl-color-swatch" data-color="#D97706" style="background:#D97706"></button>
+                        <button type="button" class="wl-color-swatch" data-color="#DC2626" style="background:#DC2626"></button>
+                        <button type="button" class="wl-color-swatch" data-color="#0891B2" style="background:#0891B2"></button>
+                    </div>
+                    <input type="hidden" id="worklist-color" value="#0059FF">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary" id="worklist-modal-cancel">Cancel</button>
+                    <button type="submit" class="btn-primary" id="worklist-modal-save">Save Worklist</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ── Worklist Detail Modal ── -->
+    <div class="modal-overlay" id="worklist-detail-overlay">
+        <div class="modal-card modal-wide">
+            <button class="modal-close" id="worklist-detail-close">&times;</button>
+            <div class="worklist-detail-header">
+                <div class="worklist-detail-dot" id="worklist-detail-dot"></div>
+                <h2 class="modal-title" id="worklist-detail-name"></h2>
+                <span class="worklist-detail-count" id="worklist-detail-count"></span>
+                <div class="worklist-detail-actions">
+                    <button class="btn-secondary btn-sm" id="worklist-detail-email">Email All</button>
+                    <button class="btn-secondary btn-sm" id="worklist-detail-pipeline">Add to Pipeline</button>
+                    <button class="btn-secondary btn-sm" id="worklist-detail-edit">Edit</button>
+                    <button class="btn-danger btn-sm" id="worklist-detail-delete">Delete</button>
+                </div>
+            </div>
+            <div id="worklist-detail-members" class="worklist-members-list">
+                <div class="dash-loading">Loading…</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Add to Worklist Mini Modal ── -->
+    <div class="modal-overlay" id="add-to-worklist-overlay">
+        <div class="modal-card" style="max-width:400px">
+            <button class="modal-close" id="add-to-worklist-close">&times;</button>
+            <h2 class="modal-title">Add to Worklist</h2>
+            <p id="add-to-worklist-name" style="color:#696969;margin-bottom:12px;font-size:14px"></p>
+            <div id="add-to-worklist-list" style="max-height:260px;overflow-y:auto;margin-bottom:12px"></div>
+            <button class="btn-secondary btn-sm" id="add-to-worklist-new" style="width:100%">+ Create New Worklist</button>
+        </div>
+    </div>
+
+    <!-- ── Firm Pitch Modal ── -->
+    <div class="modal-overlay" id="firm-pitch-modal-overlay">
+        <div class="modal-card modal-composer" style="max-width:560px">
+            <button class="modal-close" id="firm-pitch-close">&times;</button>
+            <h2 class="modal-title">Create Firm Pitch</h2>
+
+            <!-- Firm autocomplete -->
+            <div class="form-group">
+                <label class="form-label">Firm *</label>
+                <div class="ac-field">
+                    <input type="text" id="fp-firm-input" class="ac-input" placeholder="Search firms…" autocomplete="off">
+                    <div class="ac-dropdown" id="fp-firm-dropdown" style="display:none"></div>
+                    <div class="ac-pill" id="fp-firm-pill" style="display:none">
+                        <span id="fp-firm-pill-label"></span>
+                        <button class="ac-pill-clear" id="fp-firm-clear">&times;</button>
+                    </div>
+                </div>
+                <input type="hidden" id="fp-firm-id">
+                <input type="hidden" id="fp-firm-name">
+                <div class="firm-pitch-preview" id="fp-firm-preview" style="display:none"></div>
+            </div>
+
+            <!-- Candidate autocomplete (optional) -->
+            <div class="form-group">
+                <label class="form-label">Candidate <span style="color:#B4B4B4;font-weight:400">(optional — personalizes the pitch)</span></label>
+                <div class="ac-field">
+                    <input type="text" id="fp-cand-input" class="ac-input" placeholder="Search attorneys…" autocomplete="off">
+                    <div class="ac-dropdown" id="fp-cand-dropdown" style="display:none"></div>
+                    <div class="ac-pill" id="fp-cand-pill" style="display:none">
+                        <span id="fp-cand-pill-label"></span>
+                        <button class="ac-pill-clear" id="fp-cand-clear">&times;</button>
+                    </div>
+                </div>
+                <input type="hidden" id="fp-cand-id">
+            </div>
+
+            <!-- Office + Practice row -->
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Office Filter</label>
+                    <select id="fp-office-select" class="form-select">
+                        <option value="">All Offices</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Practice Group Filter</label>
+                    <select id="fp-practice-select" class="form-select">
+                        <option value="">All Practice Groups</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Custom prompt -->
+            <div class="form-group">
+                <label class="form-label">Custom Section Request <span style="color:#B4B4B4;font-weight:400">(optional)</span></label>
+                <textarea id="fp-custom-prompt" class="form-textarea" rows="2"
+                    placeholder="e.g. Emphasize the firm's pro bono program and work-life balance initiatives"></textarea>
+            </div>
+
+            <!-- Tone + Anonymize row -->
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Tone</label>
+                    <select id="fp-tone" class="form-select">
+                        <option value="professional">Professional</option>
+                        <option value="enthusiastic">Enthusiastic</option>
+                        <option value="concise">Concise</option>
+                        <option value="formal">Formal</option>
+                    </select>
+                </div>
+                <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:4px">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#313131">
+                        <input type="checkbox" id="fp-anonymize" style="width:15px;height:15px">
+                        Anonymize candidate
+                    </label>
+                </div>
+            </div>
+
+            <!-- Recruiter branding (collapsed) -->
+            <details class="pitch-branding-details">
+                <summary>Recruiter Branding</summary>
+                <div class="form-row" style="margin-top:8px">
+                    <div class="form-group">
+                        <label class="form-label">Your Name</label>
+                        <input type="text" id="fp-recruiter-name" class="form-input" placeholder="Jane Smith">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Title</label>
+                        <input type="text" id="fp-recruiter-title" class="form-input" placeholder="Senior Recruiter">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Contact</label>
+                    <input type="text" id="fp-recruiter-contact" class="form-input" placeholder="jane@firm.com · 212-555-0100">
+                </div>
+            </details>
+
+            <!-- Actions -->
+            <div class="modal-actions" style="margin-top:16px">
+                <button class="btn-secondary btn-sm" id="firm-pitch-cancel">Cancel</button>
+                <button class="btn-primary btn-sm" id="firm-pitch-submit">Generate PDF</button>
+            </div>
+
+            <!-- Loading state -->
+            <div class="pitch-loading" id="firm-pitch-loading" style="display:none">
+                <div class="pitch-loading-spinner"></div>
+                <span>Generating firm pitch document…</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* Pre-loaded server-side data — no fetch needed for initial render */
+        window.JAIDE_INITIAL_PIPELINE = {{ pipeline_rows_json | safe }};
+        window.JAIDE_INITIAL_STATS    = {{ pipeline_stats_json | safe }};
+    </script>
+    <script src="/static/script.js?v=12"></script>
+    <script src="/static/ats.js?v=16"></script>
+    <script src="/static/jobsearch.js?v=4"></script>
+    <script src="/static/firms.js?v=7"></script>
+    <script src="/static/compare.js?v=3"></script>
+    <script src="/static/custom.js?v=1"></script>
+    <script src="/static/dashboard.js?v=8"></script>
+    <script src="/static/firm-pitch.js?v=1"></script>
+    <script src="/static/email-hub.js?v=2"></script>
 
 {% else %}
 

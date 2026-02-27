@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JAIDE ATS — Feature Catalog</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #F6F6F6; color: #151515; font-size: 14px; line-height: 1.5; }
+
+/* ── Nav ── */
+.admin-nav {
+  background: #151515;
+  padding: 0 28px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.admin-nav-left { display: flex; align-items: center; gap: 16px; }
+.admin-nav-logo { color: #fff; font-size: 15px; font-weight: 700; text-decoration: none; letter-spacing: -0.3px; }
+.admin-nav-logo span { color: #0059FF; }
+.admin-nav-sep { color: #444; font-size: 18px; }
+.admin-nav-title { color: #888; font-size: 13px; }
+.admin-nav-back { color: #888; text-decoration: none; font-size: 13px; border: 1px solid #333; border-radius: 5px; padding: 4px 10px; transition: border-color 0.15s; }
+.admin-nav-back:hover { border-color: #666; color: #ccc; }
+.admin-nav-user { color: #555; font-size: 12px; }
+
+/* ── Page header ── */
+.admin-header {
+  background: linear-gradient(172deg, #000 10%, #0059FF 55%, #E0F1FF 101%);
+  padding: 36px 40px 32px;
+  color: #fff;
+}
+.admin-header h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 6px; }
+.admin-header p { color: rgba(255,255,255,0.75); font-size: 14px; margin-bottom: 4px; }
+.admin-header-meta { font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 4px; }
+
+/* ── Summary bar ── */
+.summary-bar {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+.sum-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 13px;
+  color: #fff;
+  font-weight: 500;
+  backdrop-filter: blur(4px);
+}
+.sum-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.sum-dot.live     { background: #22c55e; }
+.sum-dot.testing  { background: #F59E0B; }
+.sum-dot.stub     { background: #9CA3AF; }
+.sum-dot.planned  { background: #fff; border: 2px solid #0059FF; }
+
+/* ── Body layout ── */
+.admin-body { max-width: 1200px; margin: 0 auto; padding: 28px 24px 60px; }
+
+/* ── Section headers ── */
+.catalog-section { margin-bottom: 28px; }
+.catalog-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0 8px;
+  border-bottom: 2px solid #0059FF;
+  margin-bottom: 2px;
+}
+.catalog-section-num {
+  background: #0059FF;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.catalog-section-title { font-size: 15px; font-weight: 700; color: #151515; letter-spacing: -0.2px; }
+.catalog-section-count { margin-left: auto; font-size: 12px; color: #696969; }
+
+/* ── Feature table ── */
+.feature-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.07); }
+.feature-table thead th {
+  background: #F6F6F6;
+  color: #696969;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 14px;
+  text-align: left;
+  border-bottom: 1px solid #EDEDED;
+}
+.feature-table tbody tr { border-bottom: 1px solid #F0F0F0; transition: background 0.1s; }
+.feature-table tbody tr:last-child { border-bottom: none; }
+.feature-table tbody tr:hover { background: #FAFAFA; }
+.feature-table td { padding: 11px 14px; vertical-align: middle; }
+.col-name { width: 22%; }
+.col-desc { width: 34%; color: #444; }
+.col-status { width: 16%; }
+.col-where { width: 28%; color: #696969; font-size: 12px; }
+.feature-name { font-weight: 600; color: #151515; font-size: 13px; }
+
+/* ── Status badges ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  position: relative;
+  white-space: nowrap;
+  user-select: none;
+  transition: opacity 0.15s;
+}
+.badge:hover { opacity: 0.85; }
+.badge-live    { background: #DCFCE7; color: #166534; border: 1px solid #BBF7D0; }
+.badge-testing { background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; }
+.badge-stub    { background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; }
+.badge-prompted { background: #DBEAFE; color: #1e40af; border: 1px solid #BFDBFE; }
+.badge-planned { background: #fff; color: #0059FF; border: 2px solid #0059FF; }
+.badge-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.badge-live    .badge-dot { background: #22c55e; }
+.badge-testing .badge-dot { background: #F59E0B; }
+.badge-stub    .badge-dot { background: #9CA3AF; }
+.badge-prompted .badge-dot { background: #3B82F6; }
+.badge-planned .badge-dot { background: #0059FF; }
+
+/* ── Tooltip popup ── */
+.tip-popup {
+  display: none;
+  position: fixed;
+  z-index: 9999;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.6;
+  max-width: 340px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  pointer-events: none;
+}
+.tip-popup.visible { display: block; }
+.tip-popup strong { color: #fff; display: block; margin-bottom: 4px; font-size: 13px; }
+.tip-popup code { background: #0059FF22; color: #93C5FD; padding: 1px 5px; border-radius: 3px; font-family: monospace; font-size: 11px; }
+.tip-popup em { color: #888; font-style: normal; }
+.tip-row { margin-top: 3px; }
+
+/* ── Where badge ── */
+.where-tag {
+  display: inline-block;
+  background: #F0F4FF;
+  color: #0059FF;
+  border-radius: 4px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  margin-right: 3px;
+}
+
+/* ── Section 13 (upcoming) ── */
+.upcoming-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.upcoming-card {
+  background: #fff;
+  border: 1px solid #EDEDED;
+  border-radius: 8px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.upcoming-card-title { font-weight: 600; margin-bottom: 4px; font-size: 13px; }
+.upcoming-card-desc { color: #696969; font-size: 12px; margin-bottom: 8px; }
+.upcoming-card-file { font-size: 11px; color: #9CA3AF; font-family: monospace; }
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<header class="admin-nav">
+  <div class="admin-nav-left">
+    <a href="/" class="admin-nav-logo">JAIDE<span>ATS</span></a>
+    <span class="admin-nav-sep">·</span>
+    <span class="admin-nav-title">Feature Catalog</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:14px">
+    <span class="admin-nav-user">{{ user_name }}</span>
+    <a href="/" class="admin-nav-back">← Back to App</a>
+  </div>
+</header>
+
+<!-- Page Header -->
+<div class="admin-header">
+  <h1>JAIDE ATS — Feature Catalog</h1>
+  <p>Internal reference for all features, integrations, and capabilities</p>
+  <p class="admin-header-meta">Last updated: {{ today }} &nbsp;·&nbsp; Admin-only page &nbsp;·&nbsp; <a href="/admin" style="color:rgba(255,255,255,0.5)">Refresh</a></p>
+  <div class="summary-bar">
+    <div class="sum-chip"><span class="sum-dot live"></span>68 Live</div>
+    <div class="sum-chip"><span class="sum-dot testing"></span>4 Needs Testing</div>
+    <div class="sum-chip"><span class="sum-dot stub"></span>4 Stubbed / Placeholder</div>
+    <div class="sum-chip"><span class="sum-dot planned"></span>4 Planned / Not Started</div>
+  </div>
+</div>
+
+<!-- Tooltip popup (shared) -->
+<div class="tip-popup" id="tip-popup"></div>
+
+<!-- Body -->
+<div class="admin-body">
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 1 -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="catalog-section">
+  <div class="catalog-section-header">
+    <span class="catalog-section-num">1</span>
+    <span class="catalog-section-title">Search &amp; Matching</span>
+    <span class="catalog-section-count">7 features</span>
+  </div>
+  <table class="feature-table">
+    <thead><tr><th class="col-name">Feature</th><th class="col-desc">Description</th><th class="col-status">Status</th><th class="col-where">Where</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="col-name"><div class="feature-name">Natural Language Search</div></td>
+        <td class="col-desc">Paste a job description or type casual queries — AI extracts firm, practice area, location, school, bar requirements and matches attorneys.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Natural Language Search</strong><div class="tip-row">Route: <code>POST /api/search</code></div><div class="tip-row">Stream: <code>POST /api/search/stream</code></div><div class="tip-row">File: <em>app.py lines 3254–3745</em></div><div class="tip-row">JS: <em>script.js — handleSearchSubmit()</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Attorneys</span>Chat panel → paste JD</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Keyword Scoring &amp; Ranking</div></td>
+        <td class="col-desc">Attorneys scored by keyword relevance — school, firm, specialties, practice area weighted against job description tokens.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Keyword Scoring</strong><div class="tip-row">File: <em>app.py /api/search — _score_candidates()</em></div><div class="tip-row">Returns rank, score, rationale per attorney</div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Attorneys</span>Embedded in search results</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Hiring Pattern Analysis</div></td>
+        <td class="col-desc">Analyzes 200+ firms' 5-year lateral hiring history (feeder schools, feeder firms) to rank candidates by pattern fit.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Hiring Pattern Analysis</strong><div class="tip-row">File: <em>app.py — HIRING_DNA, _compute_hiring_dna()</em></div><div class="tip-row">Data: <em>26,541 hiring records (CSV)</em></div><div class="tip-row">Startup: pre-computed for 201 firms</div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Attorneys</span>Search results "Hiring DNA" panel</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">AI Tiered Rankings</div></td>
+        <td class="col-desc">Claude API evaluates top candidates and assigns Tier 1+, Tier 1, Tier 2, Tier 3 with plain-English rationale for each.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>AI Tiered Rankings</strong><div class="tip-row">Route: <code>POST /api/search</code></div><div class="tip-row">Model: <em>claude-sonnet-4-6 via Anthropic SDK</em></div><div class="tip-row">File: <em>app.py — _rank_candidates_with_ai()</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Attorneys</span>Search results (colored tier chips)</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Find Similar Attorneys</div></td>
+        <td class="col-desc">AI-powered similarity search — given a source attorney, finds comparable candidates by school, firm, practice, graduation year.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Find Similar</strong><div class="tip-row">Route: <code>POST /api/attorneys/similar</code></div><div class="tip-row">File: <em>app.py lines 6086–6235</em></div><div class="tip-row">JS: <em>script.js — "Find Similar" button handler</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Attorneys</span>Profile modal → "Find Similar" · Kanban card menu</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Firm Top Candidates</div></td>
+        <td class="col-desc">Pre-computed candidate matches for every firm's hiring DNA — surfaced instantly in firm detail view without real-time search.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Firm Top Candidates</strong><div class="tip-row">Route: <code>GET /api/firms/&lt;id&gt;/top-candidates</code></div><div class="tip-row">Startup: <em>_precompute_top_candidates()</em> runs on boot</div><div class="tip-row">File: <em>app.py lines 5730–5760</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Firms</span>Firm detail → "Top Candidates" tab</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Job Search</div></td>
+        <td class="col-desc">Browse and filter 1,293 CSV job listings with natural language queries, practice area, and location filters.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Job Search</strong><div class="tip-row">Route: <code>POST /api/jobsearch</code></div><div class="tip-row">File: <em>app.py lines 5051–5141</em></div><div class="tip-row">JS: <em>static/jobsearch.js</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Jobs</span>Jobs tab → search bar</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 2 -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="catalog-section">
+  <div class="catalog-section-header">
+    <span class="catalog-section-num">2</span>
+    <span class="catalog-section-title">Candidate Management</span>
+    <span class="catalog-section-count">7 features</span>
+  </div>
+  <table class="feature-table">
+    <thead><tr><th class="col-name">Feature</th><th class="col-desc">Description</th><th class="col-status">Status</th><th class="col-where">Where</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="col-name"><div class="feature-name">Attorney Profile Cards</div></td>
+        <td class="col-desc">Full two-column modal profile with bio, contact info, practice areas, specialties, school, current firm, graduation year.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Attorney Profile Cards</strong><div class="tip-row">Route: <code>GET /api/attorneys/&lt;id&gt;/full-profile</code></div><div class="tip-row">JS: <em>script.js — openProfile()</em></div><div class="tip-row">File: <em>app.py lines 4777–4796</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Attorneys</span>Click attorney name in results</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Profile Tabs</div></td>
+        <td class="col-desc">Profile, Experience (employment history), Correspondence (email log), Matched Jobs tabs. Experience tab currently returns empty — API not connected.</td>
+        <td class="col-status"><span class="badge badge-testing" data-tip='<strong>Profile Tabs</strong><div class="tip-row">Profile, Correspondence, Matched Jobs: <em>Live</em></div><div class="tip-row">Experience tab: <em>Route exists, always returns []</em></div><div class="tip-row">Route: <code>GET /api/attorneys/&lt;id&gt;/employment</code></div><div class="tip-row">File: <em>app.py line 4799 — stub comment: "empty until API connected"</em></div>'><span class="badge-dot"></span>Needs Testing</span></td>
+        <td class="col-where"><span class="where-tag">Attorneys</span>Profile modal → tabs</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Add to Pipeline</div></td>
+        <td class="col-desc">Add one or many candidates to a job pipeline from search results, profile modal, or worklist. Selects job, stage, fee, notes.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Add to Pipeline</strong><div class="tip-row">Route: <code>POST /api/pipeline</code></div><div class="tip-row">JS: <em>ats.js — openAddToPipelineModal()</em></div><div class="tip-row">File: <em>app.py lines 4407–4444</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Attorneys</span>Profile modal · search results · worklist</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Add to Worklist</div></td>
+        <td class="col-desc">Add candidates to named curated worklists from search results, profiles, pipeline cards, or Find Similar results.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Add to Worklist</strong><div class="tip-row">Route: <code>POST /api/worklists/&lt;id&gt;/members</code></div><div class="tip-row">JS: <em>dashboard.js — openAddToWorklist()</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Attorneys</span>Table row button · profile modal</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Manual Candidate Entry</div></td>
+        <td class="col-desc">Add attorneys not in the FP database — creates a custom attorney record with full profile, tags, notes, and resume upload.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Manual Candidate Entry</strong><div class="tip-row">Route: <code>POST /api/custom/attorneys</code></div><div class="tip-row">JS: <em>custom.js — openCustomAttorneyModal()</em></div><div class="tip-row">File: <em>app.py lines 4524–4602</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Attorneys</span>Attorney table → "+ Add Candidate"</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">AI Recruiter Brief</div></td>
+        <td class="col-desc">AI-generated plain-English summary of a candidate's background and fit for specific roles, surfaced in search result cards.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>AI Recruiter Brief</strong><div class="tip-row">Embedded in: <code>POST /api/search</code> (rationale per candidate)</div><div class="tip-row">Extended: <code>POST /api/followup</code> for deep-dive analysis</div><div class="tip-row">File: <em>app.py lines 3746–3855</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Attorneys</span>Search result cards (rationale text)</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Candidate Comparison</div></td>
+        <td class="col-desc">Select 2–4 candidates for AI-powered side-by-side analysis — executive summary, ranked recommendations, head-to-head breakdown, PDF export.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Candidate Comparison</strong><div class="tip-row">Route: <code>POST /api/compare</code></div><div class="tip-row">PDF: <code>POST /api/compare/pdf</code></div><div class="tip-row">JS: <em>static/compare.js</em></div><div class="tip-row">File: <em>app.py lines 6235–6449</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Attorneys</span>Select 2+ candidates → Compare button (FAB)</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 3 -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="catalog-section">
+  <div class="catalog-section-header">
+    <span class="catalog-section-num">3</span>
+    <span class="catalog-section-title">Pipeline &amp; ATS</span>
+    <span class="catalog-section-count">6 features</span>
+  </div>
+  <table class="feature-table">
+    <thead><tr><th class="col-name">Feature</th><th class="col-desc">Description</th><th class="col-status">Status</th><th class="col-where">Where</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="col-name"><div class="feature-name">Kanban Pipeline Board</div></td>
+        <td class="col-desc">Drag-and-drop kanban with 15 stages — Identified through Placed/Rejected/Withdrawn/On Hold. SortableJS-powered with stage history tracking.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Kanban Board</strong><div class="tip-row">Route: <code>GET/POST /api/pipeline</code></div><div class="tip-row">Move: <code>POST /api/pipeline/&lt;id&gt;/move</code></div><div class="tip-row">JS: <em>ats.js — renderKanbanBoard(), SortableJS</em></div><div class="tip-row">File: <em>ats.js lines 565–900</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Pipeline</span>Pipeline tab → kanban board</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Pipeline Context Bar</div></td>
+        <td class="col-desc">Smart summary bar above the board — shows "All Pipelines" summary or job-specific details (title, firm, salary, days open) depending on active filter.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Pipeline Context Bar</strong><div class="tip-row">Route: <code>GET /api/pipeline/stats?job_id=</code></div><div class="tip-row">Route: <code>GET /api/jobs/&lt;id&gt;</code></div><div class="tip-row">JS: <em>ats.js — _renderContextBar(), _refreshContextBar()</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Pipeline</span>Pipeline tab → top bar</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Pipeline Funnel Bar</div></td>
+        <td class="col-desc">Horizontal proportional bar showing all 15 stages — colored by phase (blue early, green offer, red rejected), hover shows count + avg days in stage.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Pipeline Funnel Bar</strong><div class="tip-row">Computed client-side from pipeline data</div><div class="tip-row">JS: <em>ats.js — _renderFunnelBar(pipeline)</em></div><div class="tip-row">Zero-count stages shown as 3px hairline</div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Pipeline</span>Pipeline tab → below context bar</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Stage Management</div></td>
+        <td class="col-desc">Move candidates between stages by dragging or via card menu. Terminal stages (Offer, Placed, Rejected) prompt for confirmation. Full history tracked.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Stage Management</strong><div class="tip-row">Route: <code>POST /api/pipeline/&lt;id&gt;/move</code></div><div class="tip-row">History: <em>pipeline_history table</em></div><div class="tip-row">JS: <em>ats.js — handleDragEnd(), doStageMove()</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Pipeline</span>Drag cards · card "···" menu</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Pipeline Filters</div></td>
+        <td class="col-desc">Filter by job, employer, candidate name search, and sort order. All filters update both the context bar and funnel bar in real time.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Pipeline Filters</strong><div class="tip-row">Job filter: <em>updates _currentFilterJobId, re-fetches</em></div><div class="tip-row">Sort: <em>client-side re-render only</em></div><div class="tip-row">JS: <em>ats.js lines 915–923</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Pipeline</span>Filter bar (below funnel bar)</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Placement Tracking</div></td>
+        <td class="col-desc">Set placement fees on pipeline entries. Total pipeline value shown in context bar. Placed-this-month count tracked for reporting.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Placement Tracking</strong><div class="tip-row">Route: <code>POST /api/pipeline/&lt;id&gt;/fee</code></div><div class="tip-row">Aggregated in: <code>GET /api/pipeline/stats</code></div><div class="tip-row">JS: <em>ats.js — fee editor modal</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Pipeline</span>Card menu → "Set Fee"</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 4 -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="catalog-section">
+  <div class="catalog-section-header">
+    <span class="catalog-section-num">4</span>
+    <span class="catalog-section-title">CRM &amp; Firms</span>
+    <span class="catalog-section-count">8 features</span>
+  </div>
+  <table class="feature-table">
+    <thead><tr><th class="col-name">Feature</th><th class="col-desc">Description</th><th class="col-status">Status</th><th class="col-where">Where</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="col-name"><div class="feature-name">Firm Database</div></td>
+        <td class="col-desc">Searchable, sortable table of 197+ firms with size, practice groups, locations, and ATS data merged together.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Firm Database</strong><div class="tip-row">Route: <code>GET /api/firms</code></div><div class="tip-row">Search: <code>POST /api/firms/search</code></div><div class="tip-row">JS: <em>static/firms.js</em></div><div class="tip-row">Data: <em>197 firms (CSV, 35 columns)</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Firms</span>Firms tab → Firm Database section</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">My Clients</div></td>
+        <td class="col-desc">Auto-detected active client firms (have open jobs or active pipeline). Shows inline stats, next follow-up date, quick actions.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>My Clients</strong><div class="tip-row">Route: <code>GET /api/firms/my-clients</code></div><div class="tip-row">File: <em>app.py lines 5465–5545</em></div><div class="tip-row">Auto-migration on startup from jobs + pipeline</div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Firms</span>Firms tab → "My Clients" section (top)</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Client Status</div></td>
+        <td class="col-desc">Firms categorized as Active Client, Prospect, Past Client, or Reference. Status persists in SQLite and drives filtering.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Client Status</strong><div class="tip-row">Route: <code>PUT /api/firms/&lt;id&gt;/status</code></div><div class="tip-row">File: <em>app.py lines 5575–5599</em></div><div class="tip-row">DB: <em>firm_statuses table in SQLite</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Firms</span>Firm detail → status dropdown</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Firm Detail View</div></td>
+        <td class="col-desc">Full firm profile — overview stats, practice area breakdown, office locations, key facts, hiring trends. Opens inline within the Firms view.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Firm Detail View</strong><div class="tip-row">Route: <code>GET /api/firms/&lt;id&gt;</code></div><div class="tip-row">JS: <em>firms.js — openFirmDetail()</em></div><div class="tip-row">File: <em>app.py lines 5693–5729</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Firms</span>Click any firm name</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Firm Tabs</div></td>
+        <td class="col-desc">Six tabs in firm detail: Overview, Jobs, Pipeline Activity, Notes, Contacts, Relationship Timeline.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Firm Tabs</strong><div class="tip-row">Overview: hiring DNA, practice breakdown</div><div class="tip-row">Jobs: <code>GET /api/firms/&lt;id&gt;/jobs</code></div><div class="tip-row">Pipeline: <code>GET /api/firms/&lt;id&gt;/pipeline</code></div><div class="tip-row">Timeline: <code>GET /api/firms/&lt;id&gt;/relationship-timeline</code></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Firms</span>Firm detail → tab bar</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Firm CRM Notes</div></td>
+        <td class="col-desc">Timestamped relationship notes per firm — create, view, delete. Notes appear in the relationship timeline.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Firm CRM Notes</strong><div class="tip-row">Route: <code>POST/DELETE /api/firms/&lt;id&gt;/notes</code></div><div class="tip-row">File: <em>app.py lines 5777–5790</em></div><div class="tip-row">DB: <em>firm_notes table</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Firms</span>Firm detail → Notes tab</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Firm Contacts</div></td>
+        <td class="col-desc">Track hiring partners and coordinators per firm — name, title, email, phone. Add and remove from the Contacts tab.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Firm Contacts</strong><div class="tip-row">Route: <code>POST/DELETE /api/firms/&lt;id&gt;/contacts</code></div><div class="tip-row">File: <em>app.py lines 5793–5812</em></div><div class="tip-row">DB: <em>firm_contacts table</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Firms</span>Firm detail → Contacts tab</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Manual Firm Entry</div></td>
+        <td class="col-desc">Add firms not in the FP dataset — creates a custom firm record with name, location, practice areas, tags, and notes.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Manual Firm Entry</strong><div class="tip-row">Route: <code>POST /api/custom/firms</code></div><div class="tip-row">JS: <em>custom.js — openCustomFirmModal()</em></div><div class="tip-row">File: <em>app.py lines 4641–4684</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Firms</span>Firms tab → "+ Add Firm"</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 5 -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="catalog-section">
+  <div class="catalog-section-header">
+    <span class="catalog-section-num">5</span>
+    <span class="catalog-section-title">Jobs</span>
+    <span class="catalog-section-count">5 features</span>
+  </div>
+  <table class="feature-table">
+    <thead><tr><th class="col-name">Feature</th><th class="col-desc">Description</th><th class="col-status">Status</th><th class="col-where">Where</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="col-name"><div class="feature-name">Job Search &amp; Browse</div></td>
+        <td class="col-desc">Filter and browse 1,293 CSV job listings plus ATS-created jobs. Search by title, firm, practice area, location, salary range.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Job Search</strong><div class="tip-row">Route: <code>POST /api/jobsearch</code></div><div class="tip-row">ATS jobs: <code>GET /api/jobs</code></div><div class="tip-row">JS: <em>static/jobsearch.js</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Jobs</span>Jobs tab</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Job Detail View</div></td>
+        <td class="col-desc">Full job description with firm context, salary, location, practice area, and a "Find Matching Attorneys" action.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Job Detail View</strong><div class="tip-row">Route: <code>GET /api/jobs/&lt;id&gt;</code></div><div class="tip-row">JS: <em>jobsearch.js — job card expand</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Jobs</span>Click any job card</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Find Attorneys for Job</div></td>
+        <td class="col-desc">One-click search that copies job description into the attorney search panel and triggers a full AI-ranked candidate match.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Find Attorneys for Job</strong><div class="tip-row">JS: <em>jobsearch.js — navigateTo("attorneys") + prefill JD</em></div><div class="tip-row">Calls: <em>window.JAIDE.triggerAttorneySearch()</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Jobs</span>Job card → "Find Attorneys" button</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Manual Job Entry</div></td>
+        <td class="col-desc">Create and manage job records in the ATS database — employer, title, location, practice area, salary range, status.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Manual Job Entry</strong><div class="tip-row">Route: <code>POST /api/jobs</code></div><div class="tip-row">Also: <code>POST /api/custom/jobs</code> for non-employer jobs</div><div class="tip-row">File: <em>app.py lines 4338–4370</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Jobs</span>"+ Add Job" button</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Job Status Management</div></td>
+        <td class="col-desc">Set job status to Active, On Hold, Filled, or Closed. Affects pipeline filter dropdowns and "My Active Jobs" on Dashboard.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Job Status</strong><div class="tip-row">Route: <code>PUT /api/jobs/&lt;id&gt;</code></div><div class="tip-row">DB: <em>status CHECK constraint: Active/On Hold/Filled/Closed</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Jobs</span>Job detail → status dropdown</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 6 -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="catalog-section">
+  <div class="catalog-section-header">
+    <span class="catalog-section-num">6</span>
+    <span class="catalog-section-title">AI-Powered Features</span>
+    <span class="catalog-section-count">5 features</span>
+  </div>
+  <table class="feature-table">
+    <thead><tr><th class="col-name">Feature</th><th class="col-desc">Description</th><th class="col-status">Status</th><th class="col-where">Where</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="col-name"><div class="feature-name">Candidate Pitch PDF</div></td>
+        <td class="col-desc">AI-generated PDF pitch for a single candidate — recruiter narrative, radar chart, feeder school/firm analysis, career trajectory, customizable per job.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Candidate Pitch PDF</strong><div class="tip-row">Route: <code>POST /api/pitch/generate</code></div><div class="tip-row">File: <em>app.py lines 3077–3192</em></div><div class="tip-row">Uses: <em>ReportLab + matplotlib + Claude API</em></div><div class="tip-row">History logged to pipeline_history</div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Attorneys</span>Profile modal · Kanban card menu → "Generate Pitch"</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Firm Pitch PDF</div></td>
+        <td class="col-desc">Data-driven PDF pitching a law firm to a candidate — hiring trends, attrition, practice area growth, team seniority breakdown, custom narratives.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Firm Pitch PDF</strong><div class="tip-row">Route: <code>GET /api/firm-pitch/options</code></div><div class="tip-row">Route: <code>POST /api/firm-pitch/generate</code></div><div class="tip-row">JS: <em>static/firm-pitch.js</em></div><div class="tip-row">File: <em>app.py lines 6928–7014</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Firms</span>Firm detail → "Create Firm Pitch" · Kanban "···" → "Firm Pitch"</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">AI Candidate Comparison</div></td>
+        <td class="col-desc">Claude-powered side-by-side comparison of 2–4 candidates — executive summary, ranked recommendations, head-to-head analysis per criterion.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>AI Candidate Comparison</strong><div class="tip-row">Route: <code>POST /api/compare</code></div><div class="tip-row">PDF: <code>POST /api/compare/pdf</code></div><div class="tip-row">JS: <em>static/compare.js lines 1–417</em></div><div class="tip-row">File: <em>app.py lines 6235–6449</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Attorneys</span>Select 2+ → Compare button</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">AI Email Personalization</div></td>
+        <td class="col-desc">Claude generates a fully personalized outreach email tailored to the candidate's specific background, current firm, and target role.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>AI Email Personalization</strong><div class="tip-row">Route: <code>POST /api/email/draft-personalized</code></div><div class="tip-row">Route: <code>POST /api/email/draft</code> (template fill)</div><div class="tip-row">File: <em>app.py lines 4021–4124</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Email</span>Composer → "Personalize" button (single recipient only)</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Find Similar (AI)</div></td>
+        <td class="col-desc">Given any attorney, AI identifies the most comparable candidates by school, firm, practice area, and graduation year with pre-filtering and ranked results.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Find Similar (AI)</strong><div class="tip-row">Route: <code>POST /api/attorneys/similar</code></div><div class="tip-row">File: <em>app.py lines 6086–6235</em></div><div class="tip-row">Pre-filters to 100 candidates, AI ranks top 10</div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Attorneys</span>Profile modal · Kanban card → "Find Similar"</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 7 -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="catalog-section">
+  <div class="catalog-section-header">
+    <span class="catalog-section-num">7</span>
+    <span class="catalog-section-title">Email</span>
+    <span class="catalog-section-count">8 features</span>
+  </div>
+  <table class="feature-table">
+    <thead><tr><th class="col-name">Feature</th><th class="col-desc">Description</th><th class="col-status">Status</th><th class="col-where">Where</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="col-name"><div class="feature-name">Email Composer</div></td>
+        <td class="col-desc">Modal composer with recipient pills, CC/BCC, subject, body, template fields, and send mode (mailto / SMTP direct).</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Email Composer</strong><div class="tip-row">JS: <em>script.js — openEmailComposer()</em></div><div class="tip-row">Route: <code>POST /api/email/send</code></div><div class="tip-row">Settings: <code>GET/POST /api/email/settings</code></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Email</span>Email icon in results bar / profile modal</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Bulk Email</div></td>
+        <td class="col-desc">Send one email to multiple candidates simultaneously. Backend assigns a shared batch_id UUID for grouping in the Email Hub.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Bulk Email</strong><div class="tip-row">Route: <code>POST /api/email/send</code></div><div class="tip-row">batch_id: UUID for multi-recipient sends</div><div class="tip-row">File: <em>app.py lines 4162–4200</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Email</span>Select 2+ candidates → Email button</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Email Templates</div></td>
+        <td class="col-desc">Basic template subject/body in composer. No server-side save/load of named templates — templates are per-session only.</td>
+        <td class="col-status"><span class="badge badge-testing" data-tip='<strong>Email Templates</strong><div class="tip-row">Frontend: basic template fields in composer</div><div class="tip-row">Missing: <em>no /api/email/templates save/load route</em></div><div class="tip-row">No persistent named templates — per-session only</div>'><span class="badge-dot"></span>Needs Testing</span></td>
+        <td class="col-where"><span class="where-tag">Email</span>Composer → template subject/body fields</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Email Hub</div></td>
+        <td class="col-desc">HubSpot-style email management page — paginated list of all sent emails, grouped by batch, with filters (status, days, job, search) and stats bar.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Email Hub</strong><div class="tip-row">Route: <code>GET /api/email/hub</code></div><div class="tip-row">Detail: <code>GET /api/email/hub/&lt;group_id&gt;</code></div><div class="tip-row">JS: <em>static/email-hub.js</em></div><div class="tip-row">File: <em>app.py lines 4256–4280</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Email</span>Email nav tab (top nav)</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Email History on Profiles</div></td>
+        <td class="col-desc">Per-candidate email correspondence log — shows all emails sent to that attorney, viewable from their profile modal.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Email History on Profiles</strong><div class="tip-row">Route: <code>GET /api/email/history/&lt;attorney_id&gt;</code></div><div class="tip-row">File: <em>app.py lines 4212–4226</em></div><div class="tip-row">JS: <em>script.js — profile Correspondence tab</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Attorneys</span>Profile modal → Correspondence tab</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Open/Click Tracking</div></td>
+        <td class="col-desc">Tracks email opens, link clicks, and replies. Requires Nylas integration — stats show "—" until connected. Banner visible in Email Hub.</td>
+        <td class="col-status"><span class="badge badge-stub" data-tip='<strong>Open/Click Tracking</strong><div class="tip-row">Status: <em>UI shows "—" for all tracking stats</em></div><div class="tip-row">Banner: <em>"Open &amp; Click tracking coming soon"</em></div><div class="tip-row">Blocked by: <em>Nylas integration not connected</em></div>'><span class="badge-dot"></span>Placeholder</span></td>
+        <td class="col-where"><span class="where-tag">Email</span>Email Hub → stats bar (Open Rate, Click Rate, Replies)</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Nylas Webhook</div></td>
+        <td class="col-desc">Endpoint to receive email event callbacks from Nylas. Route exists but returns a placeholder — no event processing implemented.</td>
+        <td class="col-status"><span class="badge badge-stub" data-tip='<strong>Nylas Webhook</strong><div class="tip-row">Route: <code>POST /api/email/webhook</code></div><div class="tip-row">Returns: <em>{"ok": true, "message": "Webhook received (Nylas integration pending)"}</em></div><div class="tip-row">File: <em>app.py lines 4226–4253</em></div><div class="tip-row">TODO comment at line 4252</div>'><span class="badge-dot"></span>Placeholder</span></td>
+        <td class="col-where"><span class="where-tag">Backend</span><code style="font-size:11px">POST /api/email/webhook</code></td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Email Settings</div></td>
+        <td class="col-desc">Configure send mode (mailto / SMTP), provider (Gmail, Outlook, custom), credentials, display name, title, phone for email signatures.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Email Settings</strong><div class="tip-row">Route: <code>GET/POST /api/email/settings</code></div><div class="tip-row">File: <em>app.py lines 4124–4141</em></div><div class="tip-row">Credentials stored in session only (not persisted)</div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Email</span>Email Hub → "Email Settings" button</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 8 -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="catalog-section">
+  <div class="catalog-section-header">
+    <span class="catalog-section-num">8</span>
+    <span class="catalog-section-title">Dashboard</span>
+    <span class="catalog-section-count">7 features</span>
+  </div>
+  <table class="feature-table">
+    <thead><tr><th class="col-name">Feature</th><th class="col-desc">Description</th><th class="col-status">Status</th><th class="col-where">Where</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="col-name"><div class="feature-name">Action Items</div></td>
+        <td class="col-desc">Unified list combining manual tasks with auto-generated pipeline alerts (candidates stuck in a stage, overdue follow-ups).</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Action Items</strong><div class="tip-row">Route: <code>GET /api/dashboard/action-items</code></div><div class="tip-row">File: <em>ats_db.py lines 2083–2163</em></div><div class="tip-row">JS: <em>dashboard.js — _renderUnifiedActionItems()</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Dashboard</span>Dashboard → Action Items panel</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">My Worklists</div></td>
+        <td class="col-desc">Grid of all worklists with member counts and quick "View" actions — quick entry point to curated candidate lists.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>My Worklists</strong><div class="tip-row">Route: <code>GET /api/worklists</code></div><div class="tip-row">JS: <em>dashboard.js — _renderWorklists()</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Dashboard</span>Dashboard → Worklists grid</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">My Candidates</div></td>
+        <td class="col-desc">Table of all candidates currently in any pipeline stage, filterable by stage group (Early / Interview / Offer / Rejected).</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>My Candidates</strong><div class="tip-row">Route: <code>GET /api/dashboard/candidates</code></div><div class="tip-row">JS: <em>dashboard.js — _renderMyCandidates()</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Dashboard</span>Dashboard → My Candidates table</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">My Active Jobs</div></td>
+        <td class="col-desc">Table of jobs currently being worked — status filter (All / Active / On Hold / Closed), quick link to pipeline per job.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>My Active Jobs</strong><div class="tip-row">Route: <code>GET /api/dashboard/jobs</code></div><div class="tip-row">JS: <em>dashboard.js — _renderMyJobs()</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Dashboard</span>Dashboard → My Jobs table</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Pipeline Funnel (Dashboard)</div></td>
+        <td class="col-desc">Previously a compact bar on Dashboard — moved to Pipeline page as the full 15-stage funnel bar. Dashboard no longer shows a duplicate.</td>
+        <td class="col-status"><span class="badge badge-testing" data-tip='<strong>Pipeline Funnel (Dashboard)</strong><div class="tip-row">Removed from Dashboard in Feb 2026 redesign</div><div class="tip-row">Now lives: <em>Pipeline tab → Funnel Bar</em></div><div class="tip-row">Old code: <em>dashboard.js _renderPipelineFunnel() — removed</em></div>'><span class="badge-dot"></span>Needs Testing</span></td>
+        <td class="col-where"><span class="where-tag">Pipeline</span>Moved → Pipeline tab → Funnel Bar</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Recent Activity Feed</div></td>
+        <td class="col-desc">Chronological log of all system activity — pipeline moves, emails sent, pitches generated, notes added.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Recent Activity Feed</strong><div class="tip-row">Route: <code>GET /api/activity</code></div><div class="tip-row">File: <em>app.py lines 4495–4504</em></div><div class="tip-row">JS: <em>dashboard.js — activity feed section</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Dashboard</span>Dashboard → Activity section (bottom)</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Quick Add Buttons</div></td>
+        <td class="col-desc">Quick action bar: Add Candidate, Add Job, Add Firm, New Task, New Worklist, Sent Emails. All open the relevant modal or navigate to the relevant view.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Quick Add Buttons</strong><div class="tip-row">JS: <em>dashboard.js — _bindQuickActions()</em></div><div class="tip-row">HTML: <em>index.html — .dash-quick-bar</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Dashboard</span>Dashboard → top quick bar</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 9 -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="catalog-section">
+  <div class="catalog-section-header">
+    <span class="catalog-section-num">9</span>
+    <span class="catalog-section-title">Worklists</span>
+    <span class="catalog-section-count">4 features</span>
+  </div>
+  <table class="feature-table">
+    <thead><tr><th class="col-name">Feature</th><th class="col-desc">Description</th><th class="col-status">Status</th><th class="col-where">Where</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="col-name"><div class="feature-name">Create Worklist</div></td>
+        <td class="col-desc">Named static curated lists with description, color coding. Persist in SQLite with full CRUD support.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Create Worklist</strong><div class="tip-row">Route: <code>POST /api/worklists</code></div><div class="tip-row">File: <em>app.py lines 6602–6627</em></div><div class="tip-row">JS: <em>dashboard.js — openWorklist() modal</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Dashboard</span>Dashboard → "+ New Worklist"</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Add to Worklist</div></td>
+        <td class="col-desc">Add attorneys to worklists from search results, pipeline cards, profile modals, or Find Similar results. Create new worklist on the fly.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Add to Worklist</strong><div class="tip-row">Route: <code>POST /api/worklists/&lt;id&gt;/members</code></div><div class="tip-row">JS: <em>dashboard.js — openAddToWorklist()</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Attorneys</span>Table row button · profile modal · pipeline card</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Worklist Detail View</div></td>
+        <td class="col-desc">Member list with profile links, pipeline status per candidate, notes. Slide-out overlay from the Dashboard worklist grid.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Worklist Detail View</strong><div class="tip-row">Route: <code>GET /api/worklists/&lt;id&gt;</code></div><div class="tip-row">JS: <em>dashboard.js — _openWorklist()</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Dashboard</span>Dashboard → Worklist card → "View"</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Worklist Actions</div></td>
+        <td class="col-desc">Bulk actions from worklist detail: Email All, Add All to Pipeline, Compare Selected, Export CSV. Some actions may be partial.</td>
+        <td class="col-status"><span class="badge badge-testing" data-tip='<strong>Worklist Actions</strong><div class="tip-row">Email All: <em>wires to email composer</em></div><div class="tip-row">Add to Pipeline: <em>wires to pipeline modal</em></div><div class="tip-row">Compare: <em>wires to compare modal</em></div><div class="tip-row">Export CSV: <em>partial — needs verification</em></div>'><span class="badge-dot"></span>Needs Testing</span></td>
+        <td class="col-where"><span class="where-tag">Dashboard</span>Worklist detail → action buttons</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 10 -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="catalog-section">
+  <div class="catalog-section-header">
+    <span class="catalog-section-num">10</span>
+    <span class="catalog-section-title">Tasks</span>
+    <span class="catalog-section-count">5 features</span>
+  </div>
+  <table class="feature-table">
+    <thead><tr><th class="col-name">Feature</th><th class="col-desc">Description</th><th class="col-status">Status</th><th class="col-where">Where</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="col-name"><div class="feature-name">Task Creation</div></td>
+        <td class="col-desc">Create tasks with title, type, priority (Low/Medium/High/Urgent), due date, description, and optional linked entities.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Task Creation</strong><div class="tip-row">Route: <code>POST /api/tasks</code></div><div class="tip-row">JS: <em>dashboard.js — openTaskModal()</em></div><div class="tip-row">File: <em>app.py lines 6688–6717</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Dashboard</span>Dashboard → "+ New Task"</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Task Types</div></td>
+        <td class="col-desc">Predefined types: Call, Email, Follow Up, Submit Candidates, Interview Prep, Send Agreement, Reference Check, Other.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Task Types</strong><div class="tip-row">Defined in: <em>dashboard.js task modal select</em></div><div class="tip-row">DB: <em>tasks.task_type column</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Dashboard</span>Task creation modal → Type dropdown</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Linked Tasks</div></td>
+        <td class="col-desc">Tasks linked to specific candidates (attorney_id), jobs, or firms. Link populates a contextual label on the task card.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Linked Tasks</strong><div class="tip-row">DB: <em>tasks.attorney_id, tasks.job_id, tasks.firm_id</em></div><div class="tip-row">JS: <em>dashboard.js — task modal link fields</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Dashboard</span>Task modal → link fields</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Autocomplete Search</div></td>
+        <td class="col-desc">Real-time autocomplete in task modal for linking to candidates (<code>/api/search/attorneys</code>), firms, and jobs. Debounced 300ms.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Autocomplete Search</strong><div class="tip-row">Routes: <code>GET /api/search/attorneys?q=</code></div><div class="tip-row">Routes: <code>GET /api/search/firms?q=</code></div><div class="tip-row">Routes: <code>GET /api/search/jobs?q=</code></div><div class="tip-row">JS: <em>dashboard.js — _makeAC()</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Dashboard</span>Task modal → search fields</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Task Completion</div></td>
+        <td class="col-desc">Check off tasks from the Dashboard with visual feedback (strikethrough animation). Completion tracked with timestamp.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Task Completion</strong><div class="tip-row">Route: <code>PUT /api/tasks/&lt;id&gt;/complete</code></div><div class="tip-row">JS: <em>dashboard.js — _completeTaskAnimated()</em></div><div class="tip-row">File: <em>app.py lines 6741–6750</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Dashboard</span>Dashboard → task checkbox</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 11 -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="catalog-section">
+  <div class="catalog-section-header">
+    <span class="catalog-section-num">11</span>
+    <span class="catalog-section-title">Authentication &amp; Settings</span>
+    <span class="catalog-section-count">5 features</span>
+  </div>
+  <table class="feature-table">
+    <thead><tr><th class="col-name">Feature</th><th class="col-desc">Description</th><th class="col-status">Status</th><th class="col-where">Where</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="col-name"><div class="feature-name">Login System</div></td>
+        <td class="col-desc">Email/password authentication with Flask session management. Passwords hashed with werkzeug.security. All /api/* routes protected.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Login System</strong><div class="tip-row">Route: <code>POST /api/login</code>, <code>POST /api/logout</code></div><div class="tip-row">Guard: <em>@app.before_request — require_login()</em></div><div class="tip-row">Session: <em>user_id, user_email, user_name</em></div><div class="tip-row">File: <em>app.py lines 1820–1860</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Auth</span>Marketing page → Sign In modal</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Default Admin Account</div></td>
+        <td class="col-desc">Seeded default account: <strong>admin@firmprospects.com</strong> / <strong>jaide2026</strong>. Created on first run via <code>init_users()</code>.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Default Admin Account</strong><div class="tip-row">Seeded by: <em>ats_db.init_users()</em></div><div class="tip-row">Email: admin@firmprospects.com</div><div class="tip-row">Password: jaide2026</div><div class="tip-row">Hashed with werkzeug.security</div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Auth</span>Login form</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Marketing Homepage</div></td>
+        <td class="col-desc">Full pre-login landing page with gradient hero, feature cards, CTA sections, nav with Sign In and Request Demo buttons.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Marketing Homepage</strong><div class="tip-row">Template: <em>index.html — &#123;% else %&#125; block (pre-login)</em></div><div class="tip-row">JS: <em>marketing.js</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Auth</span>Visit app when logged out</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Login Modal</div></td>
+        <td class="col-desc">Sign-in overlay on the marketing page. Sign In and Request Demo nav buttons both open it. Supports Enter-key submit and password toggle.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Login Modal</strong><div class="tip-row">HTML: <em>#mkt-login-overlay in index.html</em></div><div class="tip-row">JS: <em>marketing.js — modal open/close/submit</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Auth</span>Marketing page → Sign In / Request Demo</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">User Avatar &amp; Logout</div></td>
+        <td class="col-desc">Top-right avatar shows user initial. Dropdown reveals name, email, Settings link, and Sign Out button.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>User Avatar &amp; Logout</strong><div class="tip-row">Route: <code>POST /api/logout</code></div><div class="tip-row">JS: <em>script.js — nav avatar dropdown</em></div><div class="tip-row">HTML: <em>.nav-avatar-wrap in index.html</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Nav</span>Top-right avatar circle → dropdown</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 12 -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="catalog-section">
+  <div class="catalog-section-header">
+    <span class="catalog-section-num">12</span>
+    <span class="catalog-section-title">Data &amp; Integrations</span>
+    <span class="catalog-section-count">9 features</span>
+  </div>
+  <table class="feature-table">
+    <thead><tr><th class="col-name">Feature</th><th class="col-desc">Description</th><th class="col-status">Status</th><th class="col-where">Where</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="col-name"><div class="feature-name">Attorney Data</div></td>
+        <td class="col-desc">53,254 attorneys loaded from CSV at startup. 104 raw columns, 34 used. Includes name, firm, school, graduation year, practice areas, specialties, email.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Attorney Data</strong><div class="tip-row">Source: <em>CSV file loaded at startup into ATTORNEYS_DF</em></div><div class="tip-row">53,254 rows · 34 active columns · ~129 MB in memory</div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Backend</span>All search features</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Hiring History</div></td>
+        <td class="col-desc">26,541 lateral hiring records across 200+ firms — feeder school and feeder firm data used for hiring DNA analysis and candidate matching.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Hiring History</strong><div class="tip-row">Source: <em>CSV loaded into HIRING_DF at startup</em></div><div class="tip-row">26,541 records · 201 firms with computed DNA</div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Backend</span>Search "Hiring DNA" panel · Firm detail</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Jobs Data</div></td>
+        <td class="col-desc">1,293 active job listings loaded from CSV. Browsable and searchable in the Jobs tab. Can be imported into the ATS with one click.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Jobs Data</strong><div class="tip-row">Source: <em>CSV loaded into JOBS_DF at startup</em></div><div class="tip-row">1,293 listings</div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Jobs</span>Jobs tab</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Firms Data</div></td>
+        <td class="col-desc">197 firms with 35 columns — size, practice groups, office locations, geographic distribution. Powers the Firms tab and firm detail views.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Firms Data</strong><div class="tip-row">Source: <em>CSV loaded into FIRMS_DF at startup</em></div><div class="tip-row">197 firms · 35 columns</div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Firms</span>Firms tab</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Claude API</div></td>
+        <td class="col-desc">Anthropic Claude claude-sonnet-4-6 powers all AI features — search ranking, email generation, pitch narratives, candidate comparison, find similar.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>Claude API</strong><div class="tip-row">Model: <em>claude-sonnet-4-6</em></div><div class="tip-row">Used by: search, email, compare, pitch, find-similar, firm-pitch</div><div class="tip-row">Key: <em>ANTHROPIC_API_KEY env var</em></div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Backend</span>All AI features</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">SMTP Email</div></td>
+        <td class="col-desc">Direct email sending via Gmail or Outlook SMTP. Credentials entered per-session in Email Settings — not persisted to disk.</td>
+        <td class="col-status"><span class="badge badge-live" data-tip='<strong>SMTP Email</strong><div class="tip-row">File: <em>app.py — _send_single_email()</em></div><div class="tip-row">Also supports: mailto:// mode (opens local email client)</div><div class="tip-row">Credentials: session-only, not persisted</div>'><span class="badge-dot"></span>Live</span></td>
+        <td class="col-where"><span class="where-tag">Email</span>Email Settings → Send Mode → SMTP</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Employment History API</div></td>
+        <td class="col-desc">Firm Prospects API connection to pull per-attorney employment history. Route exists, always returns an empty array — API not connected.</td>
+        <td class="col-status"><span class="badge badge-stub" data-tip='<strong>Employment History API</strong><div class="tip-row">Route: <code>GET /api/attorneys/&lt;id&gt;/employment</code></div><div class="tip-row">Status: <em>always returns []</em></div><div class="tip-row">Comment in code: "stub — empty until API connected"</div><div class="tip-row">File: <em>app.py line 4799</em></div>'><span class="badge-dot"></span>Stubbed</span></td>
+        <td class="col-where"><span class="where-tag">Attorneys</span>Profile modal → Experience tab (shows empty)</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Nylas Email Tracking</div></td>
+        <td class="col-desc">Open, click, and reply tracking for outbound emails. Webhook endpoint built but returns placeholder. Tracking stats show "—" in Email Hub.</td>
+        <td class="col-status"><span class="badge badge-stub" data-tip='<strong>Nylas Email Tracking</strong><div class="tip-row">Webhook: <code>POST /api/email/webhook</code> — stub only</div><div class="tip-row">Banner in Email Hub: "Connect Nylas"</div><div class="tip-row">Impact: open_rate, click_rate, replies all show —</div>'><span class="badge-dot"></span>Stubbed</span></td>
+        <td class="col-where"><span class="where-tag">Email</span>Email Hub → stats bar</td>
+      </tr>
+      <tr>
+        <td class="col-name"><div class="feature-name">Calendar Integration</div></td>
+        <td class="col-desc">Sync task due dates to Google Calendar or Outlook. Not started — tasks currently have due dates stored in DB but no calendar push.</td>
+        <td class="col-status"><span class="badge badge-planned" data-tip='<strong>Calendar Integration</strong><div class="tip-row">Status: <em>Not started</em></div><div class="tip-row">Tasks have due_date in DB — no calendar sync built</div><div class="tip-row">Would need: Google Calendar API or Nylas calendar scope</div>'><span class="badge-dot"></span>Planned</span></td>
+        <td class="col-where"><span class="where-tag">Planned</span>Task due dates only (no sync)</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 13 -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="catalog-section">
+  <div class="catalog-section-header">
+    <span class="catalog-section-num">13</span>
+    <span class="catalog-section-title">Upcoming &amp; Not Yet Built</span>
+    <span class="catalog-section-count">6 items</span>
+  </div>
+  <div class="upcoming-grid">
+    <div class="upcoming-card">
+      <div class="upcoming-card-title">Employment History API</div>
+      <div class="upcoming-card-desc">Connect Firm Prospects API to pull per-attorney employment timeline. Route exists but always returns []. The Experience tab in profiles is blank until this ships.</div>
+      <div style="margin-top:6px"><span class="badge badge-stub"><span class="badge-dot"></span>Stubbed</span></div>
+      <div class="upcoming-card-file">app.py line 4799 · /api/attorneys/&lt;id&gt;/employment</div>
+    </div>
+    <div class="upcoming-card">
+      <div class="upcoming-card-title">Nylas Email Integration</div>
+      <div class="upcoming-card-desc">Full Nylas connection for open, click, and reply tracking on outbound emails. Webhook endpoint built but processing not implemented.</div>
+      <div style="margin-top:6px"><span class="badge badge-stub"><span class="badge-dot"></span>Stubbed</span></div>
+      <div class="upcoming-card-file">app.py lines 4226–4253 · /api/email/webhook</div>
+    </div>
+    <div class="upcoming-card">
+      <div class="upcoming-card-title">Saved Email Templates</div>
+      <div class="upcoming-card-desc">Persist named templates (subject + body) server-side so they survive page reloads. Currently templates are per-session only, no save/load API.</div>
+      <div style="margin-top:6px"><span class="badge badge-planned"><span class="badge-dot"></span>Planned</span></div>
+      <div class="upcoming-card-file">No route exists · frontend: email composer template fields</div>
+    </div>
+    <div class="upcoming-card">
+      <div class="upcoming-card-title">Calendar Sync</div>
+      <div class="upcoming-card-desc">Push task due dates to Google Calendar or Outlook. Tasks currently have due_date in the DB but no external calendar push has been built.</div>
+      <div style="margin-top:6px"><span class="badge badge-planned"><span class="badge-dot"></span>Planned</span></div>
+      <div class="upcoming-card-file">No code started</div>
+    </div>
+    <div class="upcoming-card">
+      <div class="upcoming-card-title">Scheduled Emails</div>
+      <div class="upcoming-card-desc">Email Hub has a "Scheduled" tab that shows "Soon" badge — the tab exists in the UI but no scheduling backend has been built.</div>
+      <div style="margin-top:6px"><span class="badge badge-planned"><span class="badge-dot"></span>Planned</span></div>
+      <div class="upcoming-card-file">index.html — hub-tab data-status="scheduled"</div>
+    </div>
+    <div class="upcoming-card">
+      <div class="upcoming-card-title">Draft Emails</div>
+      <div class="upcoming-card-desc">Email Hub has a "Drafts" tab that shows "Soon" badge — the tab exists in the UI but draft save/restore has not been built.</div>
+      <div style="margin-top:6px"><span class="badge badge-planned"><span class="badge-dot"></span>Planned</span></div>
+      <div class="upcoming-card-file">index.html — hub-tab data-status="draft"</div>
+    </div>
+  </div>
+</div>
+
+<!-- Footer -->
+<div style="text-align:center;padding:24px 0 0;color:#9CA3AF;font-size:12px;border-top:1px solid #EDEDED;margin-top:8px">
+  JAIDE ATS Feature Catalog &nbsp;·&nbsp; Internal use only &nbsp;·&nbsp; <a href="/admin" style="color:#0059FF">Refresh</a> &nbsp;·&nbsp; <a href="/" style="color:#0059FF">Back to App</a>
+</div>
+
+</div><!-- /.admin-body -->
+
+<!-- Tooltip JS -->
+<script>
+(function () {
+  var popup = document.getElementById("tip-popup");
+  var current = null;
+
+  document.querySelectorAll(".badge[data-tip]").forEach(function (el) {
+    el.addEventListener("click", function (e) {
+      e.stopPropagation();
+      if (current === el && popup.classList.contains("visible")) {
+        popup.classList.remove("visible");
+        current = null;
+        return;
+      }
+      popup.innerHTML = el.dataset.tip;
+      popup.classList.add("visible");
+      current = el;
+
+      // Position near the click
+      var rect = el.getBoundingClientRect();
+      var top = rect.bottom + window.scrollY + 6;
+      var left = rect.left + window.scrollX;
+
+      // Keep in viewport
+      var popW = 320;
+      if (left + popW > window.innerWidth - 12) {
+        left = window.innerWidth - popW - 12;
+      }
+      popup.style.top = top + "px";
+      popup.style.left = left + "px";
+    });
+  });
+
+  document.addEventListener("click", function () {
+    popup.classList.remove("visible");
+    current = null;
+  });
+
+  document.addEventListener("scroll", function () {
+    if (current) {
+      var rect = current.getBoundingClientRect();
+      popup.style.top = (rect.bottom + window.scrollY + 6) + "px";
+    }
+  }, { passive: true });
+})();
+</script>
+
+</body>
+</html>

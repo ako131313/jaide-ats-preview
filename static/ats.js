@@ -47,40 +47,46 @@
         if (view) view.style.display = "block";
     }
 
-    // Dashboard loader — populates metrics, pipeline board, and activity feed
-    function loadDashboard() {
-        loadPipelineBoard();
-        loadActivityLog();
-        // Fetch dashboard metrics
-        fetch("/api/pipeline")
-            .then(r => r.json())
-            .then(data => {
-                const pipeline = data.pipeline || [];
-                const metricPipeline = document.getElementById("metric-pipeline");
-                if (metricPipeline) metricPipeline.textContent = pipeline.length;
-                const interviewStages = ["Phone Screen", "Submitted to Client", "Interview 1", "Interview 2", "Final Interview"];
-                const interviews = pipeline.filter(p => interviewStages.includes(p.stage)).length;
-                const metricInterviews = document.getElementById("metric-interviews");
-                if (metricInterviews) metricInterviews.textContent = interviews;
-                const placements = pipeline.filter(p => p.stage === "Placed").length;
-                const metricPlacements = document.getElementById("metric-placements");
-                if (metricPlacements) metricPlacements.textContent = placements;
-                // Total pipeline value
-                const totalValue = pipeline.reduce((sum, p) => sum + (parseFloat(p.placement_fee) || 0), 0);
-                const metricValue = document.getElementById("metric-pipeline-value");
-                if (metricValue) metricValue.textContent = "$" + totalValue.toLocaleString();
-            });
-        fetch("/api/jobs?status=Active")
-            .then(r => r.json())
-            .then(data => {
-                const metricJobs = document.getElementById("metric-active-jobs");
-                if (metricJobs) metricJobs.textContent = (data.jobs || []).length;
-            });
+    function _applyStats(stats) {
+        const sc = stats.stage_counts || {};
+        const el = (id) => document.getElementById(id);
+        if (el("metric-pipeline")) el("metric-pipeline").textContent = stats.total_candidates || 0;
+        if (el("metric-active-jobs")) el("metric-active-jobs").textContent = stats.active_jobs || 0;
+        const interviews = (sc["Interview 1"] || 0) + (sc["Interview 2"] || 0) + (sc["Final Interview"] || 0);
+        if (el("metric-interviews")) el("metric-interviews").textContent = interviews;
+        if (el("metric-placements")) el("metric-placements").textContent = sc["Placed"] || 0;
+        const totalValue = stats.total_pipeline_value || 0;
+        if (el("metric-pipeline-value")) el("metric-pipeline-value").textContent = "$" + totalValue.toLocaleString();
     }
 
-    // Expose loadDashboard for navigation
+    // Dashboard loader — populates metrics, pipeline board, and activity feed
+    function loadDashboard() {
+        // Load stats + activity for the dashboard command center
+        if (window.JAIDE_INITIAL_STATS && window.JAIDE_INITIAL_STATS.total_candidates !== undefined) {
+            _applyStats(window.JAIDE_INITIAL_STATS);
+        }
+        loadActivityLog();
+        // Refresh stats in background
+        fetch("/api/pipeline/stats")
+            .then(r => r.ok ? r.json() : null)
+            .then(stats => { if (stats) _applyStats(stats); })
+            .catch(() => {});
+        // dashboard.js will handle tasks/worklists/action items via viewActivated event
+    }
+
+    function loadPipeline() {
+        // Called when navigating to the Pipeline (Kanban) view
+        if (window.JAIDE_INITIAL_PIPELINE && window.JAIDE_INITIAL_PIPELINE.length && !_pipelineData.length) {
+            _pipelineData = window.JAIDE_INITIAL_PIPELINE;
+            renderKanbanBoard(_pipelineData);
+        }
+        loadPipelineBoard();
+    }
+
+    // Expose for navigation
     window.JAIDE = window.JAIDE || {};
     window.JAIDE.loadDashboard = loadDashboard;
+    window.JAIDE.loadPipeline = loadPipeline;
     window.JAIDE.openAddToPipelineModal = openAddToPipelineModal;
     window.JAIDE.loadPipelineForJob = (jobId) => loadPipelineBoard(jobId);
     window.JAIDE.loadJobOptions = loadJobOptions;
@@ -90,11 +96,8 @@
         openAddToPipelineModal(e.detail);
     });
 
-    // Auto-load dashboard if it's the active view on page load
-    const dashboardViewEl = document.getElementById("view-dashboard");
-    if (dashboardViewEl && dashboardViewEl.classList.contains("view-active")) {
-        loadDashboard();
-    }
+    // Auto-load dashboard data on page load (deferred so all let declarations are initialized first)
+    setTimeout(() => loadDashboard(), 0);
 
     // Dashboard quick action buttons
     const dashManageJobs = $("#dash-manage-jobs");
@@ -128,30 +131,9 @@
     }
     if (dashSentEmails) {
         dashSentEmails.addEventListener("click", () => {
-            if (window.JAIDE.navigateTo) window.JAIDE.navigateTo("attorneys");
-            setTimeout(() => {
-                if (window.JAIDE.hideAllViews) window.JAIDE.hideAllViews();
-                const sentView = document.getElementById("sent-emails-view");
-                if (sentView) sentView.style.display = "block";
-                // Load sent emails
-                fetch("/api/email/log")
-                    .then(r => r.json())
-                    .then(data => {
-                        const entries = data.entries || [];
-                        const tableEl = document.getElementById("sent-emails-table");
-                        if (!tableEl) return;
-                        if (!entries.length) {
-                            tableEl.innerHTML = '<p class="no-data" style="padding:20px">No emails sent yet.</p>';
-                            return;
-                        }
-                        let rows = "";
-                        entries.forEach(e => {
-                            const statusClass = e.status === "sent" ? "status-sent" : "status-failed";
-                            rows += '<tr><td>' + esc(e.timestamp || "") + '</td><td>' + esc(e.candidate_name || "") + '</td><td>' + esc(e.to || "") + '</td><td>' + esc(e.subject || "") + '</td><td><span class="email-status ' + statusClass + '">' + esc(e.status || "") + '</span></td><td class="cell-error">' + esc(e.error || "") + '</td></tr>';
-                        });
-                        tableEl.innerHTML = '<div class="table-wrapper"><table class="candidate-table"><thead><tr><th>Time</th><th>Candidate</th><th>To</th><th>Subject</th><th>Status</th><th>Error</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
-                    });
-            }, 50);
+            if (window.JAIDE && window.JAIDE.navigateTo) {
+                window.JAIDE.navigateTo("email");
+            }
         });
     }
 
@@ -416,6 +398,17 @@
                 closeJobModal();
                 showToast(id ? "Job updated" : `Job created: ${payload.title}`);
                 loadJobs();
+                // Fire hook so Firms tab can prompt to mark employer as Active Client
+                if (!id) {
+                    const empSelect = $("#job-employer");
+                    const empName = empSelect && empSelect.selectedIndex >= 0
+                        ? empSelect.options[empSelect.selectedIndex].text : "";
+                    if (empName) {
+                        window.dispatchEvent(new CustomEvent("jobCreatedForFirm", {
+                            detail: { firm_name: empName, firm_fp_id: null }
+                        }));
+                    }
+                }
             });
     });
 
@@ -499,6 +492,7 @@
     function loadPipelineBoard(filterJobId) {
         if (filterJobId !== undefined) {
             _currentFilterJobId = filterJobId;
+            window._compareDefaultJobId = filterJobId || null;
             const filterEl = $("#pipeline-filter-job");
             if (filterEl) filterEl.value = filterJobId || "";
         }
@@ -511,10 +505,20 @@
         if (search) params.set("search", search);
 
         fetch(`/api/pipeline?${params}`)
-            .then(r => r.json())
+            .then(r => {
+                if (!r.ok) throw new Error(`Pipeline API error ${r.status}`);
+                return r.json();
+            })
             .then(data => {
                 _pipelineData = data.pipeline || [];
                 renderKanbanBoard(_pipelineData);
+                _renderFunnelBar(_pipelineData);
+                _refreshContextBar(_pipelineData, jobId);
+            })
+            .catch(err => {
+                console.error("[JAIDE] loadPipelineBoard failed:", err);
+                const board = document.getElementById("kanban-board");
+                if (board) board.innerHTML = `<p style="color:red;padding:16px">Error loading pipeline: ${err.message}</p>`;
             });
 
         // Populate filters
@@ -560,7 +564,198 @@
             });
     }
 
+    // ── Pipeline Context Bar & Funnel Bar ────────────────────────────────
+
+    function _computeStats(pipeline) {
+        const today = new Date();
+        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+        const stageCounts = {};
+        const stageDays = {};
+        let totalValue = 0;
+        let placedThisMonth = 0;
+        const jobIds = new Set();
+        const allDays = [];
+
+        pipeline.forEach(entry => {
+            const stage = entry.stage || "Identified";
+            stageCounts[stage] = (stageCounts[stage] || 0) + 1;
+            if (entry.placement_fee) totalValue += Number(entry.placement_fee);
+            if (entry.job_id) jobIds.add(entry.job_id);
+            if (entry.updated_at) {
+                const dt = new Date(entry.updated_at);
+                const d = Math.max(0, Math.floor((today - dt) / 86400000));
+                allDays.push(d);
+                if (!stageDays[stage]) stageDays[stage] = [];
+                stageDays[stage].push(d);
+                if (stage === "Placed" && dt >= monthStart) placedThisMonth++;
+            }
+        });
+
+        const avgDays = allDays.length
+            ? Math.round((allDays.reduce((a, b) => a + b, 0) / allDays.length) * 10) / 10
+            : 0;
+
+        return { total: pipeline.length, uniqueJobs: jobIds.size, totalValue, stageCounts, stageDays, avgDays, placedThisMonth };
+    }
+
+    function _fmtMoney(n) {
+        if (!n) return "$0";
+        if (n >= 1000000) return "$" + (n / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
+        if (n >= 1000) return "$" + Math.round(n / 1000) + "K";
+        return "$" + n.toLocaleString();
+    }
+
+    function _fmtSalaryRange(min, max) {
+        if (!min && !max) return null;
+        const fmt = v => v >= 1000 ? "$" + Math.round(v / 1000) + "K" : "$" + v;
+        if (min && max) return fmt(min) + "–" + fmt(max);
+        if (min) return fmt(min) + "+";
+        return "up to " + fmt(max);
+    }
+
+    function _refreshContextBar(pipeline, jobId) {
+        const stats = _computeStats(pipeline);
+        if (jobId) {
+            fetch(`/api/jobs/${jobId}`)
+                .then(r => r.json())
+                .then(d => _renderContextBar(stats, d.job || null))
+                .catch(() => _renderContextBar(stats, null));
+        } else {
+            _renderContextBar(stats, null);
+        }
+    }
+
+    function _renderContextBar(stats, job) {
+        const bar = document.getElementById("pipeline-context-bar");
+        if (!bar) return;
+
+        if (!job) {
+            bar.innerHTML = `
+                <div class="ctx-row">
+                    <span class="ctx-title">All Pipelines</span>
+                    <span class="ctx-sep"></span>
+                    <span class="ctx-stat">${stats.total} candidate${stats.total !== 1 ? "s" : ""}</span>
+                    <span class="ctx-sep"></span>
+                    <span class="ctx-stat">${stats.uniqueJobs} job${stats.uniqueJobs !== 1 ? "s" : ""}</span>
+                    <span class="ctx-sep"></span>
+                    <span class="ctx-stat">${_fmtMoney(stats.totalValue)} pipeline value</span>
+                    <span class="ctx-spacer"></span>
+                    <span class="ctx-muted">Avg. days in stage: <strong>${stats.avgDays}</strong></span>
+                    <span class="ctx-sep"></span>
+                    <span class="ctx-muted">Placed this month: <strong>${stats.placedThisMonth}</strong></span>
+                </div>`;
+        } else {
+            const created = job.created_at ? new Date(job.created_at) : null;
+            const daysOpen = created ? Math.floor((new Date() - created) / 86400000) : null;
+            const postedStr = created ? created.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : null;
+            const salary = _fmtSalaryRange(job.salary_min, job.salary_max);
+            const meta = [job.location, salary, postedStr ? `Posted ${postedStr}` : null, daysOpen !== null ? `${daysOpen} day${daysOpen !== 1 ? "s" : ""} open` : null].filter(Boolean).join(" · ");
+
+            bar.innerHTML = `
+                <div class="ctx-job-top">
+                    <div class="ctx-job-left">
+                        <span class="ctx-job-title">${esc(job.title || "")}</span>
+                        <span class="ctx-job-dash">—</span>
+                        <span class="ctx-job-firm" data-employer-id="${job.employer_id || ""}">${esc(job.employer_name || "")}</span>
+                    </div>
+                    <div class="ctx-job-actions">
+                        <button class="btn-secondary btn-xs" id="ctx-view-job-btn">View Job</button>
+                        <button class="btn-primary btn-xs" id="ctx-add-cand-btn">+ Add Candidate</button>
+                    </div>
+                </div>
+                ${meta ? `<div class="ctx-job-meta">${esc(meta)}</div>` : ""}
+                <div class="ctx-job-stats">
+                    <span class="ctx-stat">${stats.total} candidate${stats.total !== 1 ? "s" : ""}</span>
+                    <span class="ctx-sep"></span>
+                    <span class="ctx-stat">${_fmtMoney(stats.totalValue)} value</span>
+                    <span class="ctx-sep"></span>
+                    <span class="ctx-muted">Avg. days in stage: <strong>${stats.avgDays}</strong></span>
+                </div>`;
+
+            const addBtn = document.getElementById("ctx-add-cand-btn");
+            if (addBtn) addBtn.addEventListener("click", () => openCandidateSearchModal());
+
+            const viewJobBtn = document.getElementById("ctx-view-job-btn");
+            if (viewJobBtn) viewJobBtn.addEventListener("click", () => {
+                if (window.JAIDE && window.JAIDE.navigateTo) window.JAIDE.navigateTo("jobs");
+            });
+
+            // Firm name click → firms view
+            const firmEl = bar.querySelector(".ctx-job-firm");
+            if (firmEl && job.employer_id) {
+                firmEl.addEventListener("click", () => {
+                    if (window.JAIDE && window.JAIDE.navigateTo) window.JAIDE.navigateTo("firms");
+                });
+            }
+        }
+    }
+
+    const FUNNEL_STAGES = [
+        { name: "Identified",          cls: "fseg-e1" },
+        { name: "Contacted",           cls: "fseg-e2" },
+        { name: "Responded",           cls: "fseg-e3" },
+        { name: "Phone Screen",        cls: "fseg-e4" },
+        { name: "Submitted to Client", cls: "fseg-m1", short: "Submitted" },
+        { name: "Interview 1",         cls: "fseg-m2", short: "Intv. 1" },
+        { name: "Interview 2",         cls: "fseg-m3", short: "Intv. 2" },
+        { name: "Final Interview",     cls: "fseg-m4", short: "Final Intv." },
+        { name: "Reference Check",     cls: "fseg-o1", short: "Ref Check" },
+        { name: "Offer Extended",      cls: "fseg-o2", short: "Offer Ext." },
+        { name: "Offer Accepted",      cls: "fseg-o2", short: "Offer Acc." },
+        { name: "Placed",              cls: "fseg-placed" },
+        { name: "Rejected",            cls: "fseg-reject" },
+        { name: "Withdrawn",           cls: "fseg-reject" },
+        { name: "On Hold",             cls: "fseg-hold" },
+    ];
+
+    function _renderFunnelBar(pipeline) {
+        const wrap = document.getElementById("pipeline-funnel-bar");
+        if (!wrap) return;
+
+        const today = new Date();
+        const counts = {};
+        const daysMap = {};
+        FUNNEL_STAGES.forEach(s => { counts[s.name] = 0; daysMap[s.name] = []; });
+
+        pipeline.forEach(entry => {
+            const stage = entry.stage || "Identified";
+            if (counts[stage] !== undefined) {
+                counts[stage]++;
+                if (entry.updated_at) {
+                    const d = Math.max(0, Math.floor((today - new Date(entry.updated_at)) / 86400000));
+                    daysMap[stage].push(d);
+                }
+            }
+        });
+
+        const total = pipeline.length;
+        let segs = "";
+
+        FUNNEL_STAGES.forEach(s => {
+            const cnt = counts[s.name];
+            const isZero = cnt === 0;
+            const avgD = daysMap[s.name].length
+                ? (daysMap[s.name].reduce((a, b) => a + b, 0) / daysMap[s.name].length).toFixed(1)
+                : "—";
+            const tip = `${s.name}: ${cnt} candidate${cnt !== 1 ? "s" : ""} · Avg ${avgD} days in stage`;
+            const label = s.short || s.name;
+            const flexVal = isZero ? "0 0 3px" : `${Math.max(cnt, 0.5)} 1 0%`;
+
+            segs += `<div class="pfunnel-seg ${s.cls}${isZero ? " pfunnel-zero" : ""}" style="flex:${flexVal}" title="${esc(tip)}">`;
+            if (!isZero) {
+                const pct = total > 0 ? Math.round((cnt / total) * 100) : 0;
+                segs += `<span class="pfunnel-seg-lbl">${esc(label)} <b>${cnt}</b><em>${pct}%</em></span>`;
+            }
+            segs += `</div>`;
+        });
+
+        wrap.innerHTML = `<div class="pfunnel-bar">${segs}</div>`;
+    }
+
+    // ── End Context Bar & Funnel Bar ─────────────────────────────────────
+
     function renderKanbanBoard(pipeline) {
+        console.log("KANBAN RENDER CALLED", pipeline.length, "rows");
         const board = $("#kanban-board");
         const emptyState = $("#pipeline-empty");
 
@@ -642,7 +837,8 @@
 
     function createKanbanCard(entry) {
         const card = document.createElement("div");
-        card.className = "kanban-card";
+        const isCustomAtty = entry.attorney_source === "custom";
+        card.className = "kanban-card " + (isCustomAtty ? "source-custom" : "source-fp");
         card.dataset.pipelineId = entry.id;
         card.dataset.stage = entry.stage;
 
@@ -650,9 +846,12 @@
         const daysInStage = timeAgo(entry.updated_at || entry.added_at);
 
         const feeDisplay = entry.placement_fee ? `<div class="kanban-card-fee">$${Number(entry.placement_fee).toLocaleString()}</div>` : "";
+        const srcBadge = isCustomAtty
+            ? '<span class="source-badge source-badge-custom">Custom</span>'
+            : '';
 
         card.innerHTML = `
-            <div class="kanban-card-name"><a class="kanban-attorney-link" data-attorney-id="${esc(String(entry.attorney_id || ""))}">${esc(entry.attorney_name || "Unknown")}</a></div>
+            <div class="kanban-card-name"><a class="kanban-attorney-link" data-attorney-id="${esc(String(entry.attorney_id || ""))}">${esc(entry.attorney_name || "Unknown")}</a>${srcBadge}</div>
             <div class="kanban-card-firm">${esc(entry.attorney_firm || "")}</div>
             ${showJob ? `<div class="kanban-card-job"><a class="kanban-job-link" data-job-id="${entry.job_id || ""}">${esc(entry.job_title || "")}</a> ${entry.employer_name ? "@ " + esc(entry.employer_name) : ""}</div>` : ""}
             ${feeDisplay}
@@ -668,6 +867,7 @@
                     <button class="kanban-menu-item" data-action="email" data-id="${entry.id}">Send Email</button>
                     <button class="kanban-menu-item" data-action="similar" data-id="${entry.id}">Find Similar</button>
                     <button class="kanban-menu-item" data-action="pitch" data-id="${entry.id}">Generate Pitch</button>
+                    <button class="kanban-menu-item" data-action="firm-pitch" data-id="${entry.id}">Firm Pitch</button>
                     <button class="kanban-menu-item kanban-menu-danger" data-action="remove" data-id="${entry.id}">Remove</button>
                 </div>
             </div>
@@ -724,6 +924,7 @@
                 else if (action === "email") handlePipelineEmail(entry);
                 else if (action === "similar") handlePipelineFindSimilar(entry);
                 else if (action === "pitch") handlePipelinePitch(entry);
+                else if (action === "firm-pitch") _handleFirmPitch(entry);
                 else if (action === "remove") handlePipelineRemove(id, entry);
             });
         });
@@ -884,6 +1085,18 @@
             });
     }
 
+    function _handleFirmPitch(entry) {
+        if (window.JAIDE && window.JAIDE.openFirmPitchModal) {
+            window.JAIDE.openFirmPitchModal({
+                candidate: {
+                    id: entry.attorney_id || "",
+                    name: entry.attorney_name || "",
+                    practice_areas: "",
+                },
+            });
+        }
+    }
+
     function handlePipelineRemove(pipelineId, entry) {
         if (!confirm(`Remove ${entry.attorney_name || "candidate"} from pipeline?`)) return;
         fetch(`/api/pipeline/${pipelineId}`, { method: "DELETE" })
@@ -954,6 +1167,7 @@
             name: c.name || `${c.first_name || ""} ${c.last_name || ""}`.trim(),
             current_firm: c.current_firm || c.firm_name || c.firm || "",
             email: c.email || "",
+            attorney_source: c.attorney_source || c.source || "fp",
         }));
 
         fetch("/api/pipeline", {
@@ -977,6 +1191,16 @@
             if (added > 0) {
                 closePipelineAddModal();
                 loadDashboard();
+                // Fire hook so Firms tab can prompt to mark employer as Active Client
+                const jobSel = $("#pipeline-add-job");
+                const selOpt = jobSel && jobSel.selectedIndex >= 0 ? jobSel.options[jobSel.selectedIndex] : null;
+                const optGroup = selOpt && selOpt.parentElement;
+                const empName = optGroup && optGroup.tagName === "OPTGROUP" ? optGroup.label : "";
+                if (empName) {
+                    window.dispatchEvent(new CustomEvent("candidateAddedToPipeline", {
+                        detail: { employer_name: empName, firm_fp_id: null }
+                    }));
+                }
             }
         });
     });
